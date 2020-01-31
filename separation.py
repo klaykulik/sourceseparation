@@ -22,19 +22,12 @@ def normalize(data, star_name, year):
     cont = createCont(data, n_points=4)
 
     sightline = Sightline(star_name=star_name, cont=cont)
-    # for i in range(len(peak_wavelengths)):
-    #     source_name = "Source " + str(i + 1)
-    #     line_name = "line" + str(i + 1)
+    for i in range(len(peak_wavelengths)):
+        source_name = "Source " + str(i + 1)
+        line_name = "line" + str(i + 1)
 
-    sightline.addSource(source_name='source_name1', b=3.0, d=3)
-    sightline.addLine(name='line_name1', lam_0=6285, tau_0=0.3)
-
-
-    # sightline.addSource(source_name='source_name2', b=1.0, d=0.05)
-    # sightline.addLine(name='line_name2', lam_0=6281, tau_0=0.3)
-    # sightline.addLine(name='line_name3', lam_0=6277, tau_0=0.3)
-    # sightline.addLine(name='line_name4', lam_0=6278, tau_0=0.3)
-    # sightline.addLine(name='line_name5', lam_0=6279, tau_0=0.3)
+    # sightline.addSource(source_name='source_name1', b=3.0, d=3)
+    # sightline.addLine(name='line_name1', lam_0=6285, tau_0=0.3)
 
 
 
@@ -78,7 +71,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
     flat_xmin, flat_xmax = flats
 
     if shifts == True:
-        shifts = correctWavelength(
+        shifted_wavelength = correctWavelength(
             observations, xmin, xmax, silent_fit=True, silent_plot=True
         )
         print("Done calculating shifts")
@@ -99,7 +92,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
 
         if shifts == True:
             # shift data
-            data_telluric = (np.add(data_telluric[0], shifts[i]), data_telluric[1])
+            data_telluric = (np.add(data_telluric[0], shifted_wavelength[i]), data_telluric[1])
 
         # could streamline this a bit...
         data_telluric = normalize(data_telluric, obs.target, obs.date[0:4])
@@ -502,33 +495,33 @@ if __name__ == "__main__":
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # HD170740 KI test region
 
-    # file1 = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
-    # file2 = "/HD170740/RED_860/HD170740_w860_redl_20140916_O12.fits"
-    # file3 = "/HD170740/RED_860/HD170740_w860_redl_20150626_O12.fits"
-    # file4 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
-    # file5 = "/HD170740/RED_860/HD170740_w860_redl_20170705_O12.fits"
-    # sp1 = EdiblesSpectrum(file1)
-    # sp2 = EdiblesSpectrum(file2)
-    # sp3 = EdiblesSpectrum(file3)
-    # sp4 = EdiblesSpectrum(file4)
-    # sp5 = EdiblesSpectrum(file5)
+    file1 = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
+    file2 = "/HD170740/RED_860/HD170740_w860_redl_20140916_O12.fits"
+    file3 = "/HD170740/RED_860/HD170740_w860_redl_20150626_O12.fits"
+    file4 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
+    file5 = "/HD170740/RED_860/HD170740_w860_redl_20170705_O12.fits"
+    sp1 = EdiblesSpectrum(file1)
+    sp2 = EdiblesSpectrum(file2)
+    sp3 = EdiblesSpectrum(file3)
+    sp4 = EdiblesSpectrum(file4)
+    sp5 = EdiblesSpectrum(file5)
 
-    # observations = [sp1, sp2, sp3, sp4, sp5]
+    observations = [sp1, sp2, sp3, sp4, sp5]
 
-    # # xmin = 7661.5
-    # # xmax = 7669.0
-    # xmin = 7658
-    # xmax = 7675
+    # xmin = 7661.5
+    # xmax = 7669.0
+    xmin = 7658
+    xmax = 7675
 
-    # flat_xmin = 7667.6
-    # flat_xmax = 7669.1
-    # flats = (flat_xmin, flat_xmax)
+    flat_xmin = 7667.6
+    flat_xmax = 7669.1
+    flats = (flat_xmin, flat_xmax)
 
-    # sightlines = separate(
-    #     observations, stop=10, xmin=xmin, xmax=xmax, flats=flats, shifts=True
-    # )
+    sightlines = separate(
+        observations, stop=10, xmin=xmin, xmax=xmax, flats=flats, shifts=True
+    )
 
-    # print(sightlines)
+    print(sightlines)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -558,29 +551,29 @@ if __name__ == "__main__":
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    # # HD170740 6294AA test region
+    # # # HD170740 6294AA test region
 
-    file1 = '/HD170740/RED_564/HD170740_w564_redu_20140916_O11.fits'
-    file2 = '/HD170740/RED_564/HD170740_w564_redu_20150424_O11.fits'
-    file3 = '/HD170740/RED_564/HD170740_w564_redu_20160505_O11.fits'
-    file4 = '/HD170740/RED_564/HD170740_w564_redu_20160612_O11.fits'
-    file5 = '/HD170740/RED_564/HD170740_w564_redu_20170701_O11.fits'
-    sp1 = EdiblesSpectrum(file1)
-    sp2 = EdiblesSpectrum(file2)
-    sp3 = EdiblesSpectrum(file3)
-    sp4 = EdiblesSpectrum(file4)
-    sp5 = EdiblesSpectrum(file5)
+    # file1 = '/HD170740/RED_564/HD170740_w564_redu_20140916_O11.fits'
+    # file2 = '/HD170740/RED_564/HD170740_w564_redu_20150424_O11.fits'
+    # file3 = '/HD170740/RED_564/HD170740_w564_redu_20160505_O11.fits'
+    # file4 = '/HD170740/RED_564/HD170740_w564_redu_20160612_O11.fits'
+    # file5 = '/HD170740/RED_564/HD170740_w564_redu_20170701_O11.fits'
+    # sp1 = EdiblesSpectrum(file1)
+    # sp2 = EdiblesSpectrum(file2)
+    # sp3 = EdiblesSpectrum(file3)
+    # sp4 = EdiblesSpectrum(file4)
+    # sp5 = EdiblesSpectrum(file5)
 
-    observations = [sp1, sp2, sp3, sp4, sp5]
-    xmin = 6272
-    xmax = 6298
-    flat_xmin = 6273
-    flat_xmax = 6275
-    flats = (flat_xmin, flat_xmax)
+    # observations = [sp1, sp2, sp3, sp4, sp5]
+    # xmin = 6272
+    # xmax = 6298
+    # flat_xmin = 6273
+    # flat_xmax = 6275
+    # flats = (flat_xmin, flat_xmax)
 
-    sightlines = separate(observations, stop=15, xmin=xmin, xmax=xmax, flats=flats, shifts=False)
+    # sightlines = separate(observations, stop=15, xmin=xmin, xmax=xmax, flats=flats, shifts=False)
 
-    print(sightlines)
+    # print(sightlines)
 
 
 
