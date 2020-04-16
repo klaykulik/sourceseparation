@@ -5,7 +5,7 @@ from scipy.signal import find_peaks
 from astropy import constants as cst
 import pandas as pd
 
-from edibles.edibles.functions.edibles_spectrum import EdiblesSpectrum
+from edibles.edibles.utils.edibles_spectrum import EdiblesSpectrum
 from edibles.edibles.fit.models.create_model import createCont
 from edibles.edibles.fit.models.models import Sightline
 from edibles.edibles.fit.fit import fit
@@ -102,7 +102,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
             data_telluric = (np.add(data_telluric[0], shifts[i]), data_telluric[1])
 
         # could streamline this a bit...
-        data_telluric = normalize(data_telluric, obs.target, obs.date[0:4])
+        # data_telluric = normalize(data_telluric, obs.target, obs.date[0:4])
 
         data_bary = (df_subset["bary_wave"], data_telluric[1])
         datas_telluric.append(data_telluric)
@@ -123,6 +123,10 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
         sigma = sigma_real / mean
         sigmas.append(sigma)
 
+        # for i in range(len(data_telluric[1])):
+
+        data_telluric = (data_telluric[0], data_telluric[1] / mean)
+        # data_telluric = (data_telluric[0])
 
         cont = createCont(data_telluric, n_points=3)
         sightline = Sightline(star_name=obs.target, cont=cont)
@@ -200,6 +204,11 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
                 silent=True,
             )
             model_tell = fit_model(df_night[colnames[0]])
+
+            print(type(df_night))
+            print(type(df_night_bary))
+
+
             df_night[colnames[2]] = model_tell
             df_night_bary[colnames[2]] = model_tell
 

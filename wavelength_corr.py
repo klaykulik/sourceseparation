@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 
-from edibles.edibles.functions.edibles_spectrum import EdiblesSpectrum
+from edibles.edibles.utils.edibles_spectrum import EdiblesSpectrum
 from edibles.edibles.fit.models.create_model import createCont
 from edibles.edibles.fit.models.models import Sightline
 from edibles.edibles.fit.fit import fit
