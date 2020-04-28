@@ -5,7 +5,7 @@ from scipy.signal import find_peaks
 from edibles.edibles.utils import EdiblesSpectrum
 from edibles.edibles.models import createCont
 from edibles.edibles.models import Sightline
-from edibles.edibles.fitter import fit
+from edibles.edibles import fit
 
 
 def correctWavelength(observations, xmin, xmax, silent_fit=True, silent_plot=True):
@@ -16,8 +16,6 @@ def correctWavelength(observations, xmin, xmax, silent_fit=True, silent_plot=Tru
     # spacing_differences=[] # not currently used
     datas_corrected = []
     shifts = []
-
-
 
     for i in range(len(observations)):
 
@@ -41,25 +39,16 @@ def correctWavelength(observations, xmin, xmax, silent_fit=True, silent_plot=Tru
 
         sightline.addSource(source_name="Lines", b=0.01, d=0.06)
 
-
         for i in range(len(peak_wavelengths)):
-            sightline.addLine(name="line", lam_0=peak_wavelengths.iloc[i,0], tau_0=0.1)
+            sightline.addLine(name="line", lam_0=peak_wavelengths.iloc[i, 0], tau_0=0.1)
             # sightline.addLine(name="line", lam_0=peak_wavelengths[i], tau_0=0.1)
 
         model = fit(
             obs.target, (data['wave'], data['flux']), sightline.model, breakdown=False, silent=silent_fit
         )
 
-
         models.append(model)
         natural.append(sightline.lines["Lines"][-1].lam_0.val)
-
-        # spacing_differences.append(
-        #     np.abs(
-        #         sightline.lines["Telluric"][1].lam_0.val
-        #         - sightline.lines["Telluric"][0].lam_0.val
-        #     )
-        # )
 
     if silent_plot is False:
 
@@ -69,15 +58,13 @@ def correctWavelength(observations, xmin, xmax, silent_fit=True, silent_plot=Tru
             row = axes[i]
             data = datas[i]
 
-            row.axvline(x=peak_wavelengths.iloc[-1,0], c="r", label=str(peak_wavelengths.iloc[0,0]))
+            row.axvline(x=peak_wavelengths.iloc[-1, 0], c="r", label=str(peak_wavelengths.iloc[0, 0]))
             row.plot(data['wave'], data['flux'])
             ylabel = obs.date[0:10]
             row.set_ylabel(ylabel)
 
         plt.legend()
         plt.show()
-
-    # print(spacing_differences)
 
     # shift the wavelength grid
     for i in range(len(observations)):

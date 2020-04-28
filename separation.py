@@ -8,7 +8,7 @@ import pandas as pd
 from edibles.edibles.utils import EdiblesSpectrum
 from edibles.edibles.models import createCont
 from edibles.edibles.models import Sightline
-from edibles.edibles.fitter import fit
+from edibles.edibles import fit
 
 from sourceseparation.wavelength_corr import correctWavelength
 
@@ -28,12 +28,6 @@ def normalize(data, star_name, year):
 
     # sightline.addSource(source_name='source_name1', b=3.0, d=3)
     # sightline.addLine(name='line_name1', lam_0=6285, tau_0=0.3)
-
-
-
-
-
-
 
     fit_m, params = fit(star_name, data, sightline.model, breakdown=True, silent=True)
 
@@ -62,7 +56,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
 
     :return: sightline objects with models fit to data
     :rtype: list
-    
+
     """
 
     sigmas = []
@@ -70,7 +64,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
 
     flat_xmin, flat_xmax = flats
 
-    if shifts == True:
+    if shifts is True:
         shifted_wavelength = correctWavelength(
             observations, xmin, xmax, silent_fit=True, silent_plot=True
         )
@@ -90,7 +84,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
         df_subset = obs.getSpectrum(xmin=xmin, xmax=xmax)
         data_telluric = (df_subset["wave"], df_subset["flux"])
 
-        if shifts == True:
+        if shifts is True:
             # shift data
             data_telluric = (np.add(data_telluric[0], shifted_wavelength[i]), data_telluric[1])
 
@@ -103,7 +97,6 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
 
     # create sightline object
     for i in range(len(observations)):
-
 
         obs = observations[i]
         data_telluric = datas_telluric[i]
@@ -141,7 +134,6 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
     done = False
     counter = 0
     tau = 0.5
-
 
     COLNAMES1 = ["wave1", "flux1", "model1", "likelihood1"]
     COLNAMES2 = ["wave2", "flux2", "model2", "likelihood2"]
@@ -198,10 +190,6 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
             )
             model_tell = fit_model(df_night[colnames[0]])
 
-            print(type(df_night))
-            print(type(df_night_bary))
-
-
             df_night[colnames[2]] = model_tell
             df_night_bary[colnames[2]] = model_tell
 
@@ -241,11 +229,6 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
             df_night_bary4,
             df_night_bary5,
         ]
-
-
-
-
-
 
         for i in range(len(nights)):
             sigma = sigmas[i]
@@ -413,7 +396,6 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
 
         # plt.show()
 
-
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         # choose ref frame to make peak
 
@@ -432,7 +414,7 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
                 sightline = sightlines[i]
 
                 sightline.setSource(source_name="Telluric")
-    
+
                 print()
                 print("Observation #", str(i))
                 print("Lines so far:")
@@ -458,7 +440,6 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
             for i in range(len(observations)):
                 obs = observations[i]
                 sightline = sightlines[i]
-
 
                 telluric_ref_wave = bary_ref_wave / (
                     1 + (obs.v_bary / cst.c.to("km/s").value)
@@ -492,13 +473,13 @@ def separate(observations, stop, xmin, xmax, flats, shifts):
         if counter >= stop:
             done = True
 
-
         # update tau for next loop
         print(sightlines[0].lines["all"])
         newest_line = sightlines[0].lines["all"][-1]
         tau = newest_line.tau_0.val
 
     return sightlines
+
 
 if __name__ == "__main__":
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -517,10 +498,10 @@ if __name__ == "__main__":
 
     observations = [sp1, sp2, sp3, sp4, sp5]
 
-    # xmin = 7661.5
-    # xmax = 7669.0
-    xmin = 7658
-    xmax = 7675
+    xmin = 7661.5
+    xmax = 7669.0
+    # xmin = 7658
+    # xmax = 7675
 
     flat_xmin = 7667.6
     flat_xmax = 7669.1
