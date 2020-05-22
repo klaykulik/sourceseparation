@@ -5,10 +5,10 @@ from scipy.signal import find_peaks
 from astropy import constants as cst
 import pandas as pd
 
-from edibles.edibles.utils import EdiblesSpectrum
-from edibles.edibles.models import createCont
-from edibles.edibles.models import Sightline
-from edibles.edibles import fit
+from edibles.utils.edibles_spectrum import EdiblesSpectrum
+from edibles.models.create_model import createCont
+from edibles.models.model import Sightline
+from edibles.fitter import fit
 
 from sourceseparation.wavelength_corr import correctWavelength
 
