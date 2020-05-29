@@ -2,9 +2,9 @@ from __future__ import print_function
 import numpy as np
 from scipy.signal import find_peaks
 
-from edibles.edibles.models import createCont
-from edibles.edibles.models import Sightline
-from edibles.edibles import fit
+from edibles.models.create_model import createCont
+from edibles.models.model import Sightline
+from edibles.fitter import fit
 
 
 def normalize(data, star_name, year):

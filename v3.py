@@ -110,22 +110,22 @@ fakeflux5 = list(subset5.flux[0:lowest])
 print(sp1.target)
 print("Barycentric Velocity is", sp1.v_bary)
 plt.figure()
-plt.plot(shifted1, subset1.flux, label="Night1", marker='.')
-plt.plot(shifted2, subset2.flux, label="Night2", marker='.')
-plt.plot(shifted3, subset3.flux, label="Night3", marker='.')
-plt.plot(shifted4, subset4.flux, label="Night4", marker='.')
-plt.plot(shifted5, subset5.flux, label="Night5", marker='.')
+plt.plot(subset1, subset1.flux, label="Night1", marker='.')
+plt.plot(subset2, subset2.flux, label="Night2", marker='.')
+plt.plot(subset3, subset3.flux, label="Night3", marker='.')
+plt.plot(subset4, subset4.flux, label="Night4", marker='.')
+plt.plot(subset5, subset5.flux, label="Night5", marker='.')
 plt.legend()
 plt.title('Real Data')
 
 # plt.show()
 
 
-realdiff = []
-for i in range(lowest):
-    realdiff.append(np.std([subset1.flux.iloc[i], subset2.flux.iloc[i], subset3.flux.iloc[i], subset4.flux.iloc[i], subset5.flux.iloc[i]]))
+# realdiff = []
+# for i in range(lowest):
+#     realdiff.append(np.std([subset1.flux.iloc[i], subset2.flux.iloc[i], subset3.flux.iloc[i], subset4.flux.iloc[i], subset5.flux.iloc[i]]))
 
-plt.plot(subset1.wave, realdiff)
+# plt.plot(subset1.wave, realdiff)
 
 
 plt.figure()
@@ -138,30 +138,30 @@ plt.legend()
 plt.title('Fake Data')
 
 
-fakediff = []
-for i in range(lowest):
-    fakediff.append(np.std([subset1.flux.iloc[i], subset2.flux.iloc[i], subset3.flux.iloc[i], subset4.flux.iloc[i], subset5.flux.iloc[i]]))
+# fakediff = []
+# for i in range(lowest):
+#     fakediff.append(np.std([subset1.flux.iloc[i], subset2.flux.iloc[i], subset3.flux.iloc[i], subset4.flux.iloc[i], subset5.flux.iloc[i]]))
 
-plt.plot(grid, fakediff)
-
-# plt.show()
-
-
-something1 = [i * j for i, j in zip(fakeflux1, fakediff)]
-something2 = [i * j for i, j in zip(fakeflux2, fakediff)]
-something3 = [i * j for i, j in zip(fakeflux3, fakediff)]
-something4 = [i * j for i, j in zip(fakeflux4, fakediff)]
-something5 = [i * j for i, j in zip(fakeflux5, fakediff)]
-
-
-plt.scatter(grid, something1, label="Night1", marker='.')
-plt.scatter(grid, something2, label="Night2", marker='.')
-plt.scatter(grid, something3, label="Night3", marker='.')
-plt.scatter(grid, something4, label="Night4", marker='.')
-plt.scatter(grid, something5, label="Night5", marker='.')
-plt.legend()
+# # plt.plot(grid, fakediff)
 
 plt.show()
+
+
+# something1 = [i * j for i, j in zip(fakeflux1, fakediff)]
+# something2 = [i * j for i, j in zip(fakeflux2, fakediff)]
+# something3 = [i * j for i, j in zip(fakeflux3, fakediff)]
+# something4 = [i * j for i, j in zip(fakeflux4, fakediff)]
+# something5 = [i * j for i, j in zip(fakeflux5, fakediff)]
+
+
+# plt.scatter(grid, something1, label="Night1", marker='.')
+# plt.scatter(grid, something2, label="Night2", marker='.')
+# plt.scatter(grid, something3, label="Night3", marker='.')
+# plt.scatter(grid, something4, label="Night4", marker='.')
+# plt.scatter(grid, something5, label="Night5", marker='.')
+# plt.legend()
+
+# plt.show()
 
 
 

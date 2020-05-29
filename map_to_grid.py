@@ -6,7 +6,7 @@ from edibles.utils.functions import make_grid
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
 
 
-def mapToGrid(spec, xmin, xmax, resolution=300000):
+def mapToGrid(spec, xmin, xmax, resolution=50000):
     '''
     This function will interpolate a given input spectrum onto
     predetermined grid points.
@@ -59,16 +59,16 @@ if __name__ == "__main__":
     new_spec4 = mapToGrid(spec=subset4, xmin=xmin, xmax=xmax)
     new_spec5 = mapToGrid(spec=subset5, xmin=xmin, xmax=xmax)
 
-    # plt.scatter(subset1.wave, subset1.flux, marker='.')
-    # plt.scatter(subset2.wave, subset2.flux, marker='.')
-    # plt.scatter(subset3.wave, subset3.flux, marker='.')
-    # plt.scatter(subset4.wave, subset4.flux, marker='.')
-    # plt.scatter(subset5.wave, subset5.flux, marker='.')
+    plt.scatter(subset1.wave, subset1.flux)
+    plt.scatter(subset2.wave, subset2.flux)
+    plt.scatter(subset3.wave, subset3.flux)
+    plt.scatter(subset4.wave, subset4.flux)
+    plt.scatter(subset5.wave, subset5.flux)
 
-    plt.scatter(new_spec1[0], new_spec1[1])
-    plt.scatter(new_spec2[0], new_spec2[1])
-    plt.scatter(new_spec3[0], new_spec3[1])
-    plt.scatter(new_spec4[0], new_spec4[1])
-    plt.scatter(new_spec5[0], new_spec5[1])
+    plt.plot(new_spec1[0], new_spec1[1], marker='.')
+    plt.plot(new_spec2[0], new_spec2[1], marker='.')
+    plt.plot(new_spec3[0], new_spec3[1], marker='.')
+    plt.plot(new_spec4[0], new_spec4[1], marker='.')
+    plt.plot(new_spec5[0], new_spec5[1], marker='.')
 
     plt.show()
