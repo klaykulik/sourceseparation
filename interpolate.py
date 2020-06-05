@@ -19,8 +19,10 @@ def interpolate(data, xmin, xmax):
         xmax (float): Maximum wavelength value
 
     Returns:
-        list: a list of 
-
+        tuple:
+            list: Standardized wavelength grid
+            list: Each item in this list is  a list of interpolated flux values for that spectrum.
+                The length of this list is determined my the number of input spectra.
 
     '''
 
@@ -28,18 +30,7 @@ def interpolate(data, xmin, xmax):
     for spec in data:
         spacing.append(spec.header["CDELT1"])
 
-    mins = []
-    maxs = []
-    for spec in data:
-        mins.append(spec.wave.iloc[0])
-        maxs.append(spec.wave.iloc[-1])
-
-    _min = np.max(mins)
-    _max = np.min(maxs)
     _spacing = np.min(spacing)
-
-    print(_min)
-    print(_max)
 
     i_wave = np.arange(start=xmin, stop=xmax, step=_spacing)
 
