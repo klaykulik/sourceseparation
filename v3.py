@@ -1,235 +1,186 @@
-"""
-Version 3 of separation code
-
-"""
-
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from astropy import constants as cst
 
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
+from edibles.models.create_model import createCont
+from edibles.models.model import Sightline
+from edibles.fitter import fit
 
-from wavelength_corr import correctWavelength
+from sourceseparation.wavelength_corr import correctWavelength
+from interpolate import interpolate
 
 
-FILE1 = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
-FILE2 = "/HD170740/RED_860/HD170740_w860_redl_20140916_O12.fits"
-FILE3 = "/HD170740/RED_860/HD170740_w860_redl_20150626_O12.fits"
-FILE4 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
-FILE5 = "/HD170740/RED_860/HD170740_w860_redl_20170705_O12.fits"
-sp1 = EdiblesSpectrum(FILE1)
-subset1 = sp1.getSpectrum(xmin=7661.5, xmax=7669)
-sigma1 = 0.005
-subset1.flux = subset1.flux / np.max(subset1.flux)
+def coadd(fluxes, xmin, xmax):
+    """
+    Args:
+        observations (list): A list of fluxes
+        xmin (float): Minimum wavelength value (Angstroms)
+        xmax (float): Maximum wavelength value (Angstroms)
 
-sp2 = EdiblesSpectrum(FILE2)
-subset2 = sp2.getSpectrum(xmin=7661.5, xmax=7669)
-sigma2 = 0.005
-subset2.flux = subset2.flux / np.max(subset2.flux)
+    """
+    coadded = np.ones_like(iwave)
 
-sp3 = EdiblesSpectrum(FILE3)
-subset3 = sp3.getSpectrum(xmin=7661.5, xmax=7669)
-sigma3 = 0.005
-subset3.flux = subset3.flux / np.max(subset3.flux)
+    for flux in fluxes:
+        coadded *= flux
 
-sp4 = EdiblesSpectrum(FILE4)
-subset4 = sp4.getSpectrum(xmin=7661.5, xmax=7669)
-sigma4 = 0.005
-subset4.flux = subset4.flux / np.max(subset4.flux)
+    return iwave, coadded
 
-sp5 = EdiblesSpectrum(FILE5)
-subset5 = sp5.getSpectrum(xmin=7661.5, xmax=7669)
-sigma5 = 0.005
-subset5.flux = subset5.flux / np.max(subset5.flux)
 
+def iteration(spectra, fluxes):
 
-shifted_wavelength = correctWavelength(
-    observations=[sp1, sp2, sp3, sp4, sp5], xmin=7661.5, xmax=7669,
-    silent_fit=True, silent_plot=True
-)
-print(shifted_wavelength)
 
-print(subset1.wave.iloc[45])
+    return
 
-shifted1 = list(subset1.wave + shifted_wavelength[0])
-shifted2 = list(subset2.wave + shifted_wavelength[0])
-shifted3 = list(subset3.wave + shifted_wavelength[0])
-shifted4 = list(subset4.wave + shifted_wavelength[0])
-shifted5 = list(subset5.wave + shifted_wavelength[0])
 
-print(type(shifted1))
-print(shifted1[45])
+if __name__ == "__main__":
 
+    # ############################################################################################
+    # INIT
+    FILE1 = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
+    FILE2 = "/HD170740/RED_860/HD170740_w860_redl_20140916_O12.fits"
+    FILE3 = "/HD170740/RED_860/HD170740_w860_redl_20150626_O12.fits"
+    FILE4 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
+    FILE5 = "/HD170740/RED_860/HD170740_w860_redl_20170705_O12.fits"
 
-# for i in range(5):
-#     subset1 = (np.add(subset1[0], shifted_wavelength[i]), subset1.flux)
-#     subset2 = (np.add(subset2.wave, shifted_wavelength[i]), subset2.flux)
-#     subset3 = (np.add(subset3.wave, shifted_wavelength[i]), subset3.flux)
-#     subset4 = (np.add(subset4.wave, shifted_wavelength[i]), subset4.flux)
-#     subset5 = (np.add(subset5.wave, shifted_wavelength[i]), subset5.flux)
+    xmin = 7661.5
+    xmax = 7669
 
+    sp1 = EdiblesSpectrum(FILE1)
+    sp2 = EdiblesSpectrum(FILE2)
+    sp3 = EdiblesSpectrum(FILE3)
+    sp4 = EdiblesSpectrum(FILE4)
+    sp5 = EdiblesSpectrum(FILE5)
+    spectra = [sp1, sp2, sp3, sp4, sp5]
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# FAKE
+    shifts = correctWavelength(
+        spectra, xmin, xmax, silent_fit=True, silent_plot=False
+    )
 
-print(len(subset1.wave))
-print(len(subset2.wave))
-print(len(subset3.wave))
-print(len(subset4.wave))
-print(len(subset5.wave))
+    for i in range(len(spectra)):
+        spectra[i].wave = spectra[i].wave + shifts[i]
 
-print("LOWEST:")
-lowest = np.min([
-    len(subset1.wave),
-    len(subset2.wave),
-    len(subset3.wave),
-    len(subset4.wave),
-    len(subset5.wave)
-])
+    # ############################################################################################
+    # INTERPOLATE
+    iwave, fluxes = interpolate(spectra, xmin=xmin, xmax=xmax)
 
-print(lowest)
+    # ############################################################################################
+    # NORMALIZE
+    for i in range(len(fluxes)):
+        fluxes[i] = fluxes[i] / np.median(fluxes[i])
 
+    # ############################################################################################
+    # PLOT
+    [plt.plot(iwave, flux, marker='.') for flux in fluxes]
+    plt.show()
 
-grid = np.arange(lowest)
+    # ############################################################################################
+    # COADD SPECTRA
 
+    fluxes = [flux - 1 for flux in fluxes]
 
-fakewave1 = shifted1[0:lowest]
-fakewave2 = shifted2[0:lowest]
-fakewave3 = shifted3[0:lowest]
-fakewave4 = shifted4[0:lowest]
-fakewave5 = shifted5[0:lowest]
+    iwave, coadded = coadd(fluxes, xmin, xmax)
 
-fakeflux1 = list(subset1.flux[0:lowest])
-fakeflux2 = list(subset2.flux[0:lowest])
-fakeflux3 = list(subset3.flux[0:lowest])
-fakeflux4 = list(subset4.flux[0:lowest])
-fakeflux5 = list(subset5.flux[0:lowest])
+    # ############################################################################################
+    # FIND PEAKS
+    sigma = np.std(coadded)
 
+    prominence = sigma
+    peaks, _ = find_peaks(-coadded, prominence=prominence)
+    peak_wavelengths = [iwave[i] for i in peaks]
+    peak_fluxes = [coadded[i] for i in peaks]
 
+    # ############################################################################################
+    # PLOT
+    plt.plot(iwave, coadded, label='Coadded spectra', c='k', marker='.')
+    plt.hlines(y=-sigma, xmin=xmin, xmax=xmax, label='Sigma', color='b')
+    plt.scatter(peak_wavelengths, peak_fluxes, marker='x', label='Peaks', c='r')
+    plt.legend()
+    plt.show()
 
-# Show the spectrum
-print(sp1.target)
-print("Barycentric Velocity is", sp1.v_bary)
-plt.figure()
-plt.plot(subset1, subset1.flux, label="Night1", marker='.')
-plt.plot(subset2, subset2.flux, label="Night2", marker='.')
-plt.plot(subset3, subset3.flux, label="Night3", marker='.')
-plt.plot(subset4, subset4.flux, label="Night4", marker='.')
-plt.plot(subset5, subset5.flux, label="Night5", marker='.')
-plt.legend()
-plt.title('Real Data')
+    # ############################################################################################
+    # FIT
 
-# plt.show()
+    fluxes = [flux + 1 for flux in fluxes]
 
+    tell_models = []
+    for i in range(len(spectra)):
 
-# realdiff = []
-# for i in range(lowest):
-#     realdiff.append(np.std([subset1.flux.iloc[i], subset2.flux.iloc[i], subset3.flux.iloc[i], subset4.flux.iloc[i], subset5.flux.iloc[i]]))
+        sp = spectra[i]
+        data = iwave, fluxes[i]
 
-# plt.plot(subset1.wave, realdiff)
+        cont = createCont(data, n_points=4)
+        sightline = Sightline(star_name=sp.target, cont=cont)
+        sightline.addSource(source_name="Telluric", b=0.001, d=0.04)
 
+        for j in range(len(peak_wavelengths)):
 
-plt.figure()
-plt.plot(grid, fakeflux1, label="Night1", marker='.')
-plt.plot(grid, fakeflux2, label="Night2", marker='.')
-plt.plot(grid, fakeflux3, label="Night3", marker='.')
-plt.plot(grid, fakeflux4, label="Night4", marker='.')
-plt.plot(grid, fakeflux5, label="Night5", marker='.')
-plt.legend()
-plt.title('Fake Data')
+            name = "tell_" + str(i)
+            sightline.addLine(name=name, lam_0=peak_wavelengths[j], tau_0=0.6)
 
+        fit_model = fit(sp.target, data, sightline.model, breakdown=False, silent=False)
 
-# fakediff = []
-# for i in range(lowest):
-#     fakediff.append(np.std([subset1.flux.iloc[i], subset2.flux.iloc[i], subset3.flux.iloc[i], subset4.flux.iloc[i], subset5.flux.iloc[i]]))
+        tell_models.append(fit_model(iwave))
 
-# # plt.plot(grid, fakediff)
+    # ############################################################################################
+    # PLOT
+    for i in range(len(spectra)):
+        plt.subplot(np.floor(len(spectra) / 2), 3, i + 1)
 
-plt.show()
+        plt.plot(iwave, fluxes[i])
+        plt.plot(iwave, tell_models[i])
+        plt.plot(iwave, fluxes[i] - tell_models[i])
+        plt.title(spectra[i].date[0:10])
 
+    plt.show()
 
-# something1 = [i * j for i, j in zip(fakeflux1, fakediff)]
-# something2 = [i * j for i, j in zip(fakeflux2, fakediff)]
-# something3 = [i * j for i, j in zip(fakeflux3, fakediff)]
-# something4 = [i * j for i, j in zip(fakeflux4, fakediff)]
-# something5 = [i * j for i, j in zip(fakeflux5, fakediff)]
+    # #########################################################################
+    # RESIDUALS
+    resids = []
+    for i in range(len(spectra)):
+        resids.append(fluxes[i] - tell_models[i])
 
+    # #########################################################################
+    # PLOT
+    for i in range(len(spectra)):
+        plt.subplot(np.floor(len(spectra) / 2), 3, i + 1)
 
-# plt.scatter(grid, something1, label="Night1", marker='.')
-# plt.scatter(grid, something2, label="Night2", marker='.')
-# plt.scatter(grid, something3, label="Night3", marker='.')
-# plt.scatter(grid, something4, label="Night4", marker='.')
-# plt.scatter(grid, something5, label="Night5", marker='.')
-# plt.legend()
+        plt.plot(iwave, resids[i])
+        # plt.plot(iwave, tell_models[i])
+        # plt.plot(iwave, fluxes[i] - tell_models[i])
+        plt.title(spectra[i].date[0:10])
 
-# plt.show()
+    plt.show()
 
+    # #########################################################################
+    # ITER 2
 
+    # #########################################################################
+    # COADD
 
 
-# # At each wavelength point:
-# for i in range(len(sp1.wave)):
-#     x = sp1.wave[i]
-#     y = sp1.flux[i]
+    iter2_f = []
+    [iter2_f.append(resid) for resid in resids]
 
-#     # continuum
-#     c = 1
-#     # interstellar
-#     IS = 1
-#     # telluric
-#     T = 1
+    iwave, coadded = coadd(iter2_f, xmin, xmax)
 
-#     # model:
-#     y = c * IS * T
+    # ############################################################################################
+    # FIND PEAKS
+    sigma = np.std(coadded)
 
-#     ####################################
+    prominence = sigma
+    peaks, _ = find_peaks(coadded, prominence=prominence)
+    peak_wavelengths = [iwave[i] for i in peaks]
+    peak_fluxes = [coadded[i] for i in peaks]
 
-#     # PRIOR
-#     # continuum: flat between 0.5 and 1.5
-#     c_prior_flux = np.linspace(start=0.5, stop=1.5, num=len(sp1.wave))
-#     c_prior_prob = np.ones_like(c_prior_flux)
-#     c_max = c_prior_flux[np.argmax(c_prior_prob)]
+    # ############################################################################################
+    # PLOT
+    [plt.plot(iwave, f, marker='.') for f in iter2_f]
 
-#     # interstellar: flat between 0.0 and 1.0
-#     IS_prior_flux = np.linspace(0.0, 1.0, 1000)
-#     IS_prior_prob = np.ones_like(IS_prior_flux)
-#     IS_max = IS_prior_flux[np.argmax(IS_prior_prob)]
-
-#     # telluric: flat between 0.0 and 1.0
-#     T_prior_flux = np.linspace(0.0, 1.0, 1000)
-#     T_prior_prob = np.ones_like(T_prior_flux)
-#     T_max = T_prior_flux[np.argmax(T_prior_prob)]
-
-#     ####################################
-
-#     # LILKELIHOOD
-#     # continuum:
-#     c_like_flux = c_prior_flux
-#     c_like_prob = 1 / (sigma1 * np.sqrt(2 * np.pi)) \
-#         * np.exp(-((x - c_max) ** 2) / 2 * sigma1 ** 2)
-
-#     # interstellar:
-#     IS_like_flux = IS_prior_flux
-#     IS_like_prob = 1 / (sigma1 * np.sqrt(2 * np.pi)) \
-#         * np.exp(-((x - IS_max) ** 2) / 2 * sigma1 ** 2)
-
-#     # telluric
-#     T_like_flux = T_prior_flux
-#     T_like_prob = 1 / (sigma1 * np.sqrt(2 * np.pi)) \
-#         * np.exp(-((x - T_max) ** 2) / 2 * sigma1 ** 2)
-
-
-
-
-
-
-
-
-
-
-
-# plt.plot(c_prior_flux, c_prior_prob)
-# plt.show()
-# plt.scatter(c_max, c_like_prob)
-# plt.scatter(IS_max, IS_like_prob)
-# plt.scatter(T_max, T_like_prob)
-# plt.show()
+    plt.plot(iwave, coadded, label='Coadded spectra', c='k', marker='.')
+    # plt.hlines(y=sigma, xmin=xmin, xmax=xmax, label='Sigma', color='b')
+    plt.scatter(peak_wavelengths, peak_fluxes, marker='x', label='Peaks', c='r')
+    # plt.legend()
+    plt.show()
