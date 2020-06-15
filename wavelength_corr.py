@@ -87,7 +87,7 @@ def correctWavelength(observations, xmin, xmax, silent_fit=True, silent_plot=Tru
             data = datas_corrected[i]
 
             row.axvline(x=np.mean(natural), c="r", label=str(np.mean(natural)))
-            row.axvline(x=7660.42, c="r")
+            row.axvline(x=7662.1, c="r")
 
             row.plot(data[0], data[1])
             ylabel = obs.date[0:10]

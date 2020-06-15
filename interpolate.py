@@ -1,9 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
-
 
 
 def interpolate(data, xmin, xmax):
@@ -40,11 +38,6 @@ def interpolate(data, xmin, xmax):
         i_flux = f(i_wave)
         fluxes.append(i_flux)
 
-    for i in range(len(fluxes)):
-        plt.plot(i_wave, fluxes[i], marker='.')
-
-    plt.show()
-
     return i_wave, fluxes
 
 
@@ -58,28 +51,18 @@ if __name__ == "__main__":
 
     sp1 = EdiblesSpectrum(FILE1)
     subset1 = sp1.getSpectrum(xmin=7661.5, xmax=7669)
-    sigma1 = 0.005
-    # subset1.flux = subset1.flux / np.max(subset1.flux)
 
     sp2 = EdiblesSpectrum(FILE2)
     subset2 = sp2.getSpectrum(xmin=7661.5, xmax=7669)
-    sigma2 = 0.005
-    # subset2.flux = subset2.flux / np.max(subset2.flux)
 
     sp3 = EdiblesSpectrum(FILE3)
     subset3 = sp3.getSpectrum(xmin=7661.5, xmax=7669)
-    sigma3 = 0.005
-    # subset3.flux = subset3.flux / np.max(subset3.flux)
 
     sp4 = EdiblesSpectrum(FILE4)
     subset4 = sp4.getSpectrum(xmin=7661.5, xmax=7669)
-    sigma4 = 0.005
-    # subset4.flux = subset4.flux / np.max(subset4.flux)
 
     sp5 = EdiblesSpectrum(FILE5)
     subset5 = sp5.getSpectrum(xmin=7661.5, xmax=7669)
-    sigma5 = 0.005
-    # subset5.flux = subset5.flux / np.max(subset5.flux)
 
     data = [sp1, sp2, sp3, sp4, sp5]
     interpolate(data, xmin=7661.5, xmax=7669)
