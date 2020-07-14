@@ -28,8 +28,11 @@ subset4 = sp4.getSpectrum(xmin=xmin, xmax=xmax)
 sp5 = EdiblesSpectrum(FILE5)
 subset5 = sp5.getSpectrum(xmin=xmin, xmax=xmax)
 
+xmin = 7661.4
+xmax = 7668.9
+
 spectra = [sp1, sp2, sp3, sp4, sp5]
-iwave, fluxes = interpolate(spectra, xmin=xmin, xmax=xmax)
+iwave, fluxes = interpolate(spectra)
 
 
 for i in range(len(fluxes)):
