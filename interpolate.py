@@ -36,12 +36,15 @@ def interpolate(data, bary=False):
         xmax = np.min([np.max(spec.bary_wave) for spec in data])
 
         i_wave = np.arange(start=xmin, stop=xmax, step=_spacing)
+        print(len(i_wave))
 
-        fluxes = []
+        # fluxes = []
         for spec in data:
+
             f = interp1d(spec.bary_wave, spec.flux)
             i_flux = f(i_wave)
-            fluxes.append(i_flux)
+            spec.bary_wave = i_wave
+            spec.flux = i_flux
 
 
     else:
@@ -50,13 +53,14 @@ def interpolate(data, bary=False):
 
         i_wave = np.arange(start=xmin, stop=xmax, step=_spacing)
 
-        fluxes = []
+        # fluxes = []
         for spec in data:
             f = interp1d(spec.wave, spec.flux)
             i_flux = f(i_wave)
-            fluxes.append(i_flux)
+            spec.wave = i_wave
+            spec.flux = i_flux
 
-    return i_wave, fluxes
+    return data
 
 
 if __name__ == "__main__":
@@ -85,15 +89,20 @@ if __name__ == "__main__":
     data = [sp1, sp2, sp3, sp4, sp5]
 
 
-    i_wave, fluxes = interpolate(data)
-
-    for flux in fluxes:
-        plt.plot(i_wave, flux, marker='.')
-    plt.show()
 
 
-    b_wave, fluxes = interpolate(data, bary=True)
 
-    for flux in fluxes:
-        plt.plot(b_wave, flux, marker='.')
+    # EITHER TELLURIC OR BARYCENTRIC!!!
+
+    # data1 = interpolate(data)
+
+    # for spec in data1:
+    #     plt.plot(spec.wave, spec.flux, marker='.')
+    # plt.show()
+
+
+    data2 = interpolate(data, bary=True)
+
+    for spec in data2:
+        plt.plot(spec.bary_wave, spec.flux, marker='.')
     plt.show()
