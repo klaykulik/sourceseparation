@@ -36,9 +36,7 @@ def interpolate(data, bary=False):
         xmax = np.min([np.max(spec.bary_wave) for spec in data])
 
         i_wave = np.arange(start=xmin, stop=xmax, step=_spacing)
-        print(len(i_wave))
 
-        # fluxes = []
         for spec in data:
 
             f = interp1d(spec.bary_wave, spec.flux)
@@ -53,7 +51,6 @@ def interpolate(data, bary=False):
 
         i_wave = np.arange(start=xmin, stop=xmax, step=_spacing)
 
-        # fluxes = []
         for spec in data:
             f = interp1d(spec.wave, spec.flux)
             i_flux = f(i_wave)
