@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import copy
-import astropy.constants as cst
+from scipy.interpolate import UnivariateSpline
 
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
 from edibles.sightline import Sightline
@@ -38,51 +37,35 @@ sightline2 = Sightline(sp2, n_anchors=5)
 sightline3 = Sightline(sp3, n_anchors=5)
 sightline4 = Sightline(sp4, n_anchors=5)
 sightline5 = Sightline(sp5, n_anchors=5)
-
 sightlines = [sightline1, sightline2, sightline3, sightline4, sightline5]
 
-
-tell_sightlines = copy.deepcopy(sightlines)
-bary_sightlines = copy.deepcopy(sightlines)
-
-# for sightline in sightlines:
-#     plt.plot(sightline.grid, sightline.interp_flux)
-# # plt.show()
-
-# # for sightline in sightlines:
-#     plt.plot(sightline.grid, sightline.interp_bary_flux)
-# plt.show()
-
+for sightline in sightlines:
+    plt.plot(sightline.grid, sightline.interp_flux)
+    plt.plot(sightline.grid, sightline.interp_bary_flux)
+plt.show()
 
 # O_2 data from HITRAN
 pars_list = convert(read_hitran('telluric_lines_HITRAN.txt'))
 
-
 # Set tau_cutoff (0.4, 0.02, or 0.0)
 tau_cutoff = 0.4
-
-
 
 linelist = []
 for pars in pars_list:
     if (xmin < pars['lam_0']) and (pars['lam_0'] < xmax):
         if pars['tau_0'] > tau_cutoff:
-
             linelist.append(pars)
 
 linelist.reverse()
-print(linelist)
-
+# print(linelist)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# TELLURIC
-
+# FIT TELLURIC HITRAN LINES
 resids = []
 outs = []
-tell_errs = []
-tell_lams = []
-for sightline in tell_sightlines:
-
+errs_list = []
+lams_list = []
+for sightline in sightlines:
     sightline.add_source(name='O2', similar={'b': 0.6})
 
     for i in range(len(linelist)):
@@ -90,35 +73,17 @@ for sightline in tell_sightlines:
         if line['tau_0'] > tau_cutoff:
             name = 'line' + str(i)
             sightline.add_line(name=name, source='O2', pars=line)
-            # print(sightline.model_pars)
             par_name_d = 'O2_' + name + '_d'
             sightline.model_pars[par_name_d].set(value=0.05)
 
-    out = sightline.model.eval(data=sightline.interp_flux,
-                               params=sightline.model_pars,
-                               x=sightline.grid)
-    resid = sightline.interp_flux - out
+    sightline.fit(report=True, plot=False)
 
-    # PLOT unfit lines
-    # plt.plot(sightline.grid, sightline.interp_flux)
-    # plt.plot(sightline.grid, out)
-    # plt.plot(sightline.grid, resid)
-    # plt.show()
-
-    sightline.fit(report=True, plot=True)
-
-    out = sightline.model.eval(data=sightline.interp_flux,
+    out = sightline.model.eval(data=sightline.flux,
                                params=sightline.result.params,
-                               x=sightline.grid)
-    resid = sightline.interp_flux - out
-
-
-    # PLOT fit lines in one sightline
-    # plt.plot(sightline.grid, sightline.interp_flux)
-    # plt.plot(sightline.grid, out)
-    # plt.plot(sightline.grid, resid)
-
-
+                               x=sightline.wave)
+    resid = sightline.flux - out
+    resids.append(resid)
+    outs.append(out)
 
     errs = []
     lams = []
@@ -126,116 +91,29 @@ for sightline in tell_sightlines:
         if name[-5:] == 'lam_0':
             errs.append(sightline.result.params[name].stderr)
             lams.append(sightline.result.params[name].value)
+    errs_list.append(errs)
+    lams_list.append(lams)
 
-    tell_errs.append(errs)
-    tell_lams.append(lams)
-
-
-
-    resids.append(resid)
-    outs.append(out)
-
-
-# # PLOT fit lines in all sightlines
+# PLOT fit lines in all sightlines
 for i in range(len(resids)):
-    # plt.plot(tell_sightlines[i].grid, tell_sightlines[i].interp_flux, marker='.')
-    # plt.plot(tell_sightlines[i].grid, outs[i], marker='.')
-    plt.plot(tell_sightlines[i].grid, resids[i], marker='.')
+    plt.plot(sightlines[i].wave, resids[i], marker='.')
 
 plt.show()
 
 
-coadd = np.ones_like(resids[0])
-
-for resid in resids:
-    coadd *= resid
-
-plt.plot(tell_sightlines[0].grid, coadd)
-plt.show()
-
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# # WHAT NEXT
-
-# for each sightline:
-#     tell_data, bary_data, tell_model, tell_out, tell_resid
-
-# we also have:
-#     coadded
-
-
-# try to get bary_resid:
-#     bary_resid = bary_data - bary_out
-#     bary_out = fit(model with bary_data)
-
-
-
-# tell_sightlines[0].add_source(name='O2', similar={'b': 0.6})
-
-# for i in range(len(linelist)):
-#     line = linelist[i]
-#     if line['tau_0'] > tau_cutoff:
-#         name = 'line' + str(i)
-#         tell_sightlines[0].add_line(name=name, source='O2', pars=line)
-#         # print(tell_sightlines[0].model_pars)
-#         par_name_d = 'O2_' + name + '_d'
-#         tell_sightlines[0].model_pars[par_name_d].set(value=0.05)
-
-# out = tell_sightlines[0].model.eval(data=tell_sightlines[0].interp_flux,
-#                                     params=tell_sightlines[0].model_pars,
-#                                     x=tell_sightlines[0].grid)
-# resid = tell_sightlines[0].interp_flux - out
-
-# # PLOT unfit lines
-# # plt.plot(tell_sightlines[0].grid, tell_sightlines[0].interp_flux)
-# # plt.plot(tell_sightlines[0].grid, out)
-# # plt.plot(tell_sightlines[0].grid, resid)
-# # plt.show()
-
-# result = tell_sightlines[0].fit(report=True, plot=False)
-
-
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-# plt.figure()
-# for i in range(len(linelist)):
-#     line = linelist[i]
-#     if line['tau_0'] > tau_cutoff:
-#         plt.scatter(line['lam_0'], 0, c='k')
-#         plt.vlines(x=line['lam_0'], ymin=-30, ymax=10)
-
-# # print(sightline)
-
-
-# for i in range(len(tell_sightlines)):
-#     sightline = tell_sightlines[i]
-
-#     for name in sightline.model.param_names:
-#         if name[-5:] == 'lam_0':
-
-#             plt.scatter(sightline.result.params[name].value, sightline.v_bary)
-
-
-# plt.show()
-
-
-
+# CORRECT WAVELENGTH SHIFT FROM FIT
 reals = [linelist[i]['lam_0'] for i in range(len(linelist))]
-
-
-
 print(reals)
-
-
+shift_resids = [np.subtract(reals, lams) for lams in lams_list]
 
 cs = ['C0', 'C1', 'C2', 'C3', 'C4']
-for i in range(len(tell_sightlines)):
-    lams = tell_lams[i]
-    errs = tell_errs[i]
+for i in range(len(sightlines)):
+    lams = lams_list[i]
+    errs = errs_list[i]
+    shift = shift_resids[i]
 
-    shift_resids = np.subtract(reals, lams)
-
-
-    plt.errorbar(reals, shift_resids, yerr=errs, fmt='o', c=cs[i], label=tell_sightlines[i].datetime.date())
+    plt.errorbar(reals, shift, yerr=errs, fmt='o', c=cs[i], label=sightlines[i].datetime.date())
 
 plt.scatter(reals, np.zeros_like(reals), c='k', label='HITRAN data')
 
@@ -245,7 +123,44 @@ plt.title("HD170740")
 plt.legend()
 plt.show()
 
+for i in range(len(sightlines)):
+
+    weights = np.mean(shift_resids[i]) - np.abs(np.mean(shift_resids[i]) - shift_resids[i])
+    weights = 1 / shift_resids[i]
+
+    spl = UnivariateSpline(reals, shift_resids[i])
+    # spl.set_smoothing_factor(5)
+
+    plt.scatter(reals, shift_resids[i], c=cs[i])
+    plt.plot(reals, spl(reals), linestyle='dashed')
+    plt.plot(sightlines[i].wave, spl(sightlines[i].wave), c=cs[i])
+plt.show()
 
 
 
+shifted_grids = []
+for i in range(len(sightlines)):
 
+    weights = np.mean(shift_resids[i]) - np.abs(np.mean(shift_resids[i]) - shift_resids[i])
+    weights = 1 / shift_resids[i]
+
+    spl = UnivariateSpline(reals, shift_resids[i])
+    # spl.set_smoothing_factor(5)
+
+    # plt.plot(sightlines[i].wave + spl(sightlines[i].wave), sightlines[i].flux, c=cs[i])
+
+
+
+    shifted_grids.append(sightlines[i].wave + spl(sightlines[i].wave))
+
+
+
+for i in range(len(sightlines)):
+
+
+    plt.plot(shifted_grids[i], sightlines[i].flux, label=sightlines[i].datetime.date())
+
+
+plt.scatter(reals, np.zeros_like(reals), c='k', label='HITRAN data')
+plt.legend()
+plt.show()
