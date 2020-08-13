@@ -3,21 +3,35 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 
 from edibles.sightline import Sightline
+from edibles.utils.edibles_spectrum import EdiblesSpectrum
 
 from sourceseparation.read_hitran import read_hitran, convert
 
 
-def telluric_shift(observations, xmin, xmax, zoom_min, zoom_max, plot=False):
+def telluric_shift(observations, xmin, xmax, zoom_xmin, zoom_xmax, plot=False):
     '''Correct the spectra using telluric lines from the HITRAN dataset.
 
-    xmin/xmax are the wavelength bounds of the data to fit telluric lines to.
-    zoom_min/zoom_max are the bounds for the returned EdiblesSpectrum objects.
+    Args:
+        observations (list): A lsit of EdiblesSpectrum objects
+        xmin (float): Minimum wavelength to fit the telluric spectrum,
+There should be lines in this range from HITRAN
+        xmax (float): Maximum wavelength to fit the telluric spectrum,
+There should be lines in this range from HITRAN
+        zoom_xmin (float): Minimum wavelength of the returned spectrum,
+must be greater than xmin and xmin+shift
+        zoom_xmax (float): Maximum wavelength of the returned spectrum,
+must be less than xmax and xmax+shift
+        plot (bool): If true, plots the fitting of each sightline,
+the peak differences from the HITRAN data (with spline), and the shifted data.
 
+    Returns:
+        list: The initial list of EdiblesSpectrum objects, each with updated (shifted)
+wave, bary_wave, flux, bary_flux, grid, interp_flux, and interp_bary_flux attributes
 
     '''
 
-    assert zoom_min > xmin + 0.5
-    assert zoom_max < xmax - 0.5
+    assert zoom_xmin > xmin + 0.5
+    assert zoom_xmax < xmax - 0.5
 
     # O_2 data from HITRAN
     pars_list = convert(read_hitran('telluric_lines_HITRAN.txt'))
@@ -45,7 +59,7 @@ def telluric_shift(observations, xmin, xmax, zoom_min, zoom_max, plot=False):
     errs_list = []
     lams_list = []
     for sightline in sightlines:
-        print('Fitting sightline...')
+        print('Fitting telluric lines...')
         sightline.add_source(name='O2', similar={'b': 0.6})
 
         for i in range(len(linelist)):
@@ -56,7 +70,7 @@ def telluric_shift(observations, xmin, xmax, zoom_min, zoom_max, plot=False):
                 par_name_d = 'O2_' + name + '_d'
                 sightline.model_pars[par_name_d].set(value=0.05)
 
-        sightline.fit(report=False, plot=False)
+        sightline.fit(report=False, plot=plot)
 
         out = sightline.model.eval(data=sightline.flux,
                                    params=sightline.result.params,
@@ -88,7 +102,8 @@ def telluric_shift(observations, xmin, xmax, zoom_min, zoom_max, plot=False):
         errs = errs_list[i]
         shift_resid = shift_resids[i]
 
-        # weights = np.mean(shift_resids[i]) - np.abs(np.mean(shift_resids[i]) - shift_resids[i])
+        # weights = np.mean(shift_resids[i]) -
+        # np.abs(np.mean(shift_resids[i]) - shift_resids[i])
         # weights = 1 / shift_resids[i]
         spl = UnivariateSpline(reals, shift_resids[i])
         # spl.set_smoothing_factor(5)
@@ -112,7 +127,7 @@ def telluric_shift(observations, xmin, xmax, zoom_min, zoom_max, plot=False):
     for i in range(len(observations)):
         sp = observations[i]
         shift = shifts[i]
-        sp.shift(shift, xmin=zoom_min, xmax=zoom_max)
+        sp.shift(shift, zoom_xmin=zoom_xmin, zoom_xmax=zoom_xmax)
 
     if plot:
         for sp in observations:
@@ -124,12 +139,6 @@ def telluric_shift(observations, xmin, xmax, zoom_min, zoom_max, plot=False):
 
 
 if __name__ == '__main__':
-
-    import os
-
-    from edibles.utils.edibles_spectrum import EdiblesSpectrum
-
-    CURRENT_DIR = os.getcwd()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # IMPORT DATA
@@ -150,17 +159,22 @@ if __name__ == '__main__':
     sp5 = EdiblesSpectrum(file5)
     observations = [sp1, sp2, sp3, sp4, sp5]
 
-    os.chdir(CURRENT_DIR)
-
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # CORRECT TELLURIC SHIFT
 
-    observations = telluric_shift(observations, xmin, xmax)
+    observations = telluric_shift(observations, xmin=xmin, xmax=xmax,
+                                  zoom_xmin=7661, zoom_xmax=7670)
 
+    for sp in observations:
+        # plt.plot(sp.wave, sp.flux)
+        plt.plot(sp.grid, sp.interp_flux)
+    plt.show()
 
+    length = np.min([len(sp.interp_flux) for sp in observations])
+    print(length)
+    coadd = np.ones(length)
+    for sp in observations:
+        coadd /= sp.interp_flux[0:length]
 
-
-
-
-
-
+    plt.plot(sp.grid[0:length], coadd)
+    plt.show()
