@@ -133,12 +133,12 @@ def loop(sightlines, iteration, debug=False):
 
         print('Fitting geocentric sightline...')
         sightline.fit(data=sightline.interp_flux, x=sightline.grid,
-                      report=False, plot=False)
+                      report=True, plot=False)
         out = sightline.model.eval(data=sightline.interp_flux,
                                    params=sightline.result.params,
                                    x=sightline.grid)
 
-        resid = out - sightline.interp_flux  # divide or subtract?
+        resid = out - sightline.interp_flux
         resids.append(resid)
 
         # Plot
@@ -159,7 +159,7 @@ def loop(sightlines, iteration, debug=False):
                                              params=bary_sightline.bary_result.params,
                                              x=bary_sightline.grid)
 
-        bary_resid = bary_out - bary_sightline.interp_bary_flux  # divide or subtract?
+        bary_resid = bary_out - bary_sightline.interp_bary_flux
         bary_resids.append(bary_resid)
 
         # Plot
