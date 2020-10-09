@@ -1,157 +1,206 @@
-import numpy as np
 import matplotlib.pyplot as plt
-import astropy.constants as cst
-import scipy.stats as stats
+import numpy as np
 
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
-
-from interpolate import interpolate
-
-
-FILE1 = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
-FILE2 = "/HD170740/RED_860/HD170740_w860_redl_20140916_O12.fits"
-FILE3 = "/HD170740/RED_860/HD170740_w860_redl_20150626_O12.fits"
-FILE4 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
-FILE5 = "/HD170740/RED_860/HD170740_w860_redl_20170705_O12.fits"
-
-xmin = 7661.5
-xmax = 7669
-
-sp1 = EdiblesSpectrum(FILE1)
-subset1 = sp1.getSpectrum(xmin=xmin, xmax=xmax)
-sp2 = EdiblesSpectrum(FILE2)
-subset2 = sp2.getSpectrum(xmin=xmin, xmax=xmax)
-sp3 = EdiblesSpectrum(FILE3)
-subset3 = sp3.getSpectrum(xmin=xmin, xmax=xmax)
-sp4 = EdiblesSpectrum(FILE4)
-subset4 = sp4.getSpectrum(xmin=xmin, xmax=xmax)
-sp5 = EdiblesSpectrum(FILE5)
-subset5 = sp5.getSpectrum(xmin=xmin, xmax=xmax)
-
-xmin = 7661.4
-xmax = 7668.9
-
-spectra = [sp1, sp2, sp3, sp4, sp5]
-iwave, fluxes = interpolate(spectra)
+from edibles.models import ContinuumModel, VoigtModel
 
 
-for i in range(len(fluxes)):
-    fluxes[i] = fluxes[i] / np.median(fluxes[i])
 
 
-# [plt.plot(iwave, flux, marker='.') for flux in fluxes]
-# plt.show()
+from numpy.dual import inv
+import numdifftools as ndt
 
 
-# ######################## first point
-
-# ### MODEL
-def model(flux, tell):
-    '''
-    Args:
-        flux (float): The observed flux value
-        tell (float): The telluric transmission, 0<tell<1
-
-    Returns:
-        cont (float): The flux before passing through the atmosphere
-    '''
-    cont = tell / flux
-    return cont
 
 
-# ### PRIOR - probability model is correct, or, what we think the initial values should be
-fig, axs = plt.subplots(1, 2, sharey=True)
-plt.suptitle("Priors")
+filename = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
 
-# Tell should be between 0 and 1 - represents transmission coefficient
-# lets say uniform for now?
-telluric = np.linspace(0, 1)
-tell_prob = stats.uniform.pdf(telluric)
-axs[0].plot(telluric, tell_prob)
-axs[0].fill_between(telluric, 0, tell_prob, alpha=0.3)
-axs[0].set_ylabel("PDF")
-axs[0].set_xlabel("Telluric Transmission")
+method = 'least_squares'
 
-# cont_flux doesnt really have a necessary range - probably near 1
-# I DONT THINK YOU NEED THIS...
-cont_flux = np.linspace(0, 1)
-cont_prob = stats.beta.pdf(cont_flux, 4, 2)
-cont_flux += 0.2
-axs[1].plot(cont_flux, cont_prob)
-axs[1].fill_between(cont_flux, 0, cont_prob, alpha=0.3)
-axs[1].set_xlabel("Continuum value")
+sp = EdiblesSpectrum(filename)
+print(sp.target)
+sp.getSpectrum(xmin=7661, xmax=7670)
+# sp.flux = sp.flux / np.max(sp.flux)
 
+# #################################################################################
+
+n_anchors = 4
+
+cont_model = ContinuumModel(n_anchors=n_anchors)
+cont_pars = cont_model.guess(sp.flux, x=sp.wave)
+model = cont_model
+pars = cont_pars
+
+# for i in range(n_anchors):
+#     print(i)
+#     if i > 0:
+
+#         pars['x_' + str(i)].set(min=pars['x_' + str(i - 1)].value + 0.001, vary=True)
+
+print(pars)
+
+
+# pars['x_0'].set(min=0)
+# pars['x_1'].set(min=pars['x_0'].value)
+# pars['x_2'].set(min=pars['x_1'].value)
+# pars['x_3'].set(min=pars['x_2'].value)
+
+
+# for i in range(n_anchors):
+    # if i > 0:
+    #     pars['x_%i' % (i)].set(min=pars['x_%i' % (i - 1)].value)
+
+
+
+result = model.fit(data=sp.flux, params=pars, x=sp.wave, method=method)
+out = model.eval(data=sp.flux, params=result.params, x=sp.wave)
+resid = sp.flux - out
+
+# print(result.fit_report())
+result.plot_fit()
 plt.show()
 
 
-# ### LIKELIHOOD - probability you get the data, GIVEN THE MODEL IS CORRECT
 
-data = [flux[0] for flux in fluxes]
-print(data)
-tell = 1
-
-likes = []
-[likes.append(model(datum, tell)) for datum in data]
-print(likes)
-
-fig, axs = plt.subplots(1, 2, sharey=True)
-plt.suptitle("Likelihoods")
+print(result.covar)
+print()
+print()
+print()
+print()
 
 
-telluric = np.linspace(0, 1)
-tell_prob = stats.uniform.pdf(telluric)
-axs[0].plot(telluric, tell_prob)
-axs[0].fill_between(telluric, 0, tell_prob, alpha=0.3)
-axs[0].vlines(tell, ymin=0, ymax=1, color='r')
-axs[0].set_ylabel("PDF")
-axs[0].set_xlabel("Telluric Transmission")
+# #################################################################################
 
 
-cont_flux = np.linspace(0, 1)
-cont_prob = stats.beta.pdf(cont_flux, 4, 2)
-cont_flux += 0.2
-axs[1].plot(cont_flux, cont_prob)
-axs[1].fill_between(cont_flux, 0, cont_prob, alpha=0.3)
-axs[1].vlines(likes, ymin=0, ymax=2, color='red')
-
-# axs[1].set_xlabel("Continuum value")
-
-plt.show()
-
-# ### posterior
+voigt1 = VoigtModel(prefix='v1_')
+voigt1_pars = voigt1.guess(sp.flux, x=sp.wave)
 
 
+voigt2 = VoigtModel(prefix='v2_')
+voigt2_pars = voigt2.guess(sp.flux, x=sp.wave)
 
 
+voigt3 = VoigtModel(prefix='v3_')
+voigt3_pars = voigt3.guess(sp.flux, x=sp.wave)
 
 
+model = voigt1 * voigt2 * voigt3
+pars = voigt1_pars + voigt2_pars + voigt3_pars
 
 
+pars['v1_lam_0'].set(value=7664.794, min=3000, max=7665.25)
+pars['v1_b'].set(value=0.8, min=0.5, max=5)
+pars['v1_d'].set(value=0.04, min=0, max=10)
+pars['v1_tau_0'].set(value=0.76, min=0, max=10)
 
 
+pars['v2_lam_0'].set(value=7665.25, min=7665, max=7665.5)
+pars['v2_b'].set(value=1.9, min=0.49, max=5)
+pars['v2_d'].set(value=0.002, min=0, max=10)
+pars['v2_tau_0'].set(value=0.15, min=0, max=10)
+
+
+pars['v3_lam_0'].set(value=7665.9, min=7665.5, max=7667)
+pars['v3_b'].set(value=0.79, min=0.51, max=5)
+pars['v3_d'].set(value=0.04, min=0, max=10)
+pars['v3_tau_0'].set(value=0.72, min=0, max=10)
 
 
 
 
 
+# result = model.fit(data=sp.flux, params=pars, x=sp.wave, method=method)
+# out = model.eval(data=sp.flux, params=result.params, x=sp.wave)
+# resid = sp.flux - out
 
 
-
-
-# # ##### tell ref frame
-
-# iwaves_bary = []
-# for sp in data:
-#     v_bary = sp.v_bary
-
-#     iwave_bary = iwave[0] + (sp.v_bary / cst.c.to("km/s").value) * iwave[0]
-
-#     iwaves_bary.append(iwave_bary)
-
-
-# print(iwaves_bary)
-
-
-# plt.scatter(iwave[0], 1)
-# [plt.scatter(iwave_bary, 2) for iwave_bary in iwaves_bary]
+# result.plot_fit()
 # plt.show()
+
+# print(result.covar)
+# print()
+# print()
+# print()
+# print()
+
+# #################################################################################
+
+# print(np.all(np.isfinite(out)))
+# print(model.param_names)
+# print(result.x)
+# print()
+# print(result.penalty)
+# print()
+
+
+
+model = cont_model * voigt1 * voigt2 * voigt3
+
+pars = cont_pars + pars
+
+
+
+result = model.fit(data=sp.flux, params=pars, x=sp.wave, method=method)
+result.plot_fit()
+plt.show()
+print("the real answer:")
+print(result.covar)
+
+print()
+print()
+print()
+print()
+
+
+# print(result.aborted)
+# print(len(result.residual) > len(result.var_names))
+
+
+
+
+# # print(result.penalty)
+
+
+
+# # print(result.params)
+# print(result.x)
+
+# # test = np.array([
+# #     7.66479465e+03, 8.34800324e-01, 4.35296180e-02, 7.28037043e-01,
+# #     7.66527454e+03, 1.95507309e+00, 2.31807517e-03, 1.57555907e-01,
+# #     7.66586677e+03, 7.93483416e-01, 4.36312498e-02, 7.63314901e-01
+# # ])
+# # print(test)
+
+
+# print()
+# print()
+# print()
+
+
+
+# Hfun = ndt.Hessian(result.penalty, step=1e-4)
+
+
+
+# hessian_ndt = Hfun(result.x)
+
+# print(hessian_ndt)
+
+# cov_x = inv(hessian_ndt) * 2.0
+
+
+# print(len(result.residual))
+# print(len(result.var_names))
+# print(result.nfev)
+
+
+# print(type(result.covar))
+# print(result.covar)
+
+# # plt.plot(sp.wave, sp.flux)
+# # plt.plot(sp.wave, out)
+# # plt.plot(sp.wave, resid)
+# # plt.show()
+
+#  # if self.nan_policy == 'raise' and not np.all(np.isfinite(model))
