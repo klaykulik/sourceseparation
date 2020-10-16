@@ -106,7 +106,6 @@ for sightline in sightlines:
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # LOOP
 
-
 def loop(sightlines, iteration, debug=False, plot=False):
 
     # %%%%%%%%%%%%%%%% Fit geocentric model and get residuals %%%%%%%%%%%%%%%%%
@@ -128,7 +127,7 @@ def loop(sightlines, iteration, debug=False, plot=False):
         telluric_resid = sightline.interp_flux - out
         telluric_resids.append(telluric_resid)
 
-        print(sightline.result.covar)
+        # print(sightline.result.covar)
 
     # %%%%%%%%%%%%%%% Calculate barycentric model and residuals %%%%%%%%%%%%%%%
     bary_resids = []
@@ -189,6 +188,30 @@ def loop(sightlines, iteration, debug=False, plot=False):
             axs[i, 1].plot(bary_grid, bary_out_interp)
             axs[i, 1].plot(bary_grid, bary_resid_interp)
         plt.show()
+
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Check to stop %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    stop(sightlines)
+
+    if len(sightline.answers) > 1:
+
+        if sightline.answers[-1] / sightline.answers[-2] > 1:
+            print(
+                str(len(sightline.answers))
+                + ' lines are better than '
+                + str(len(sightline.answers) - 1)
+            )
+
+        else:
+            print(
+                str(len(sightline.answers))
+                + ' lines are NOT better than '
+                + str(len(sightline.answers) - 1)
+            )
+            sys.exit()
+
+
+
 
     # %%%%%%%%%%%%%%%%%%%%%%%%% Calculate likelihoods %%%%%%%%%%%%%%%%%%%%%%%%%
     likelihoods = []
@@ -286,41 +309,95 @@ def loop(sightlines, iteration, debug=False, plot=False):
         sys.exit()
 
 
-answers = []
-for i in range(7):
-    loop(sightlines, i, debug=False, plot=True)
+def stop(sightlines):
 
-    # the equation:
-    num_lines = len(sightlines[0].peaks)
-    lam_range = 1
-    b_range = 1
-    d_range = 1
-    tau_range = 1
-    c_range = 1
-    chi_sq_min = 1
-    n_anchors = sightline.n_anchors
-    det = np.linalg.det(sightline.result.covar)
+    # get 'answer' in each sightline
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+        num_lines = len(sightlines[0].peaks)
 
-    answer = (
-        np.math.factorial(num_lines)
-        / (
-            (lam_range * b_range * d_range * tau_range) ** num_lines
-            * c_range ** n_anchors
+        # compute ranges for each line
+        range_terms = []
+        for i in range(num_lines):
+
+            # print(sightline.result.params)
+
+            lam_name = sightline.peaks[i].name
+            b_name = lam_name.replace('lam_0', 'b')
+            d_name = lam_name.replace('lam_0', 'd')
+            tau_name = lam_name.replace('lam_0', 'tau_0')
+
+            # print(lam_name, b_name, d_name, tau_name)
+
+            lam_range = sightline.result.params[lam_name].max - sightline.result.params[lam_name].min
+            b_range = sightline.result.params[b_name].max - sightline.result.params[b_name].min
+            d_range = sightline.result.params[d_name].max - sightline.result.params[d_name].min
+            tau_range = sightline.result.params[tau_name].max - sightline.result.params[tau_name].min
+
+            range_term = lam_range * b_range * d_range * tau_range
+            range_terms.append(range_term)
+
+        c_ranges = []
+        for name in sightline.model_pars:
+            if 'y_' in name:
+                c_range = sightline.result.params[name].max - sightline.result.params[name].min
+                c_ranges.append(c_range)
+
+
+        denominator_term = 1
+        for c_range in c_ranges:
+            denominator_term = denominator_term * c_range
+
+
+        for term in range_terms:
+            denominator_term = denominator_term * term
+
+        det = np.linalg.det(sightline.result.covar)
+
+        # answer = (
+        #     np.math.factorial(num_lines)
+        #     / (
+        #         (lam_range * b_range * d_range * tau_range) ** num_lines
+        #         * c_range ** sightline.n_anchors
+        #     )
+        #     * (4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2)
+        #     / (np.sqrt(det))
+        #     * np.exp(sightline.result.chisqr / 2)
+        # )
+        # answers.append(answer)
+
+        answer = (
+            np.log(np.math.factorial(num_lines))
+            - np.log(denominator_term)
+            + np.log((4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2))
+            - np.log(np.sqrt(det))
+            - (sightline.result.chisqr / 2)
         )
-        * (4 * np.pi) ** ((2 * num_lines + n_anchors) / 2)
-        / (np.sqrt(det))
-        * np.exp(chi_sq_min / 2)
-    )
+
+        try:
+            sightline.answers.append(answer)
+        except AttributeError:
+            sightline.answers = [answer]
 
 
-    print(answer)
+        print()
+        print(sightline.datetime.date())
+        print(np.log(np.math.factorial(num_lines)))
+        print(np.log(denominator_term))
+        print(np.log((4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2)))
+        print(np.log(np.sqrt(det)))
+        print((sightline.result.chisqr / 2))
 
-    answers.append(answer)
+        print(sightline.answers)
 
-    if len(answers) > 1:
-        if answer / answers[-1] > 1:
-            print(str(num_lines) + ' lines are better than ' + str(num_lines - 1))
 
-        else:
-            print('Not better!')
-            sys.exit()
+
+
+for i in range(7):
+    # print(sightlines[0].model_pars)
+
+    loop(sightlines, i, debug=False, plot=False)
+
+
+
+
