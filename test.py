@@ -179,6 +179,19 @@ print()
 
 
 
+
+
+# print(np.all(np.isfinite(out)))
+# print(model.param_names)
+# print(result.x)
+# print()
+# print(result.penalty)
+# print()
+
+
+
+
+
 # Hfun = ndt.Hessian(result.penalty, step=1e-4)
 
 

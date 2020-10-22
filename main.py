@@ -42,13 +42,20 @@ observations = telluric_shift(
     observations, xmin=xmin, xmax=xmax, zoom_xmin=zoom_xmin, zoom_xmax=zoom_xmax
 )
 
-for sp in observations:
-    # plt.plot(sp.wave, sp.flux)
-    plt.plot(sp.grid, sp.interp_flux)
-plt.show()
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# NORMALIZE
 
-# Ensure all same length
-length = [len(sp.interp_flux) for sp in observations]
+# for obs in observations:
+#     obs.raw_flux = obs.raw_flux / np.max(obs.raw_flux)
+#     obs.flux = obs.flux / np.max(obs.flux)
+#     obs.interp_flux = obs.interp_flux / np.max(obs.interp_flux)
+#     obs.interp_bary_flux = obs.interp_bary_flux / np.max(obs.interp_bary_flux)
+
+
+# for obs in observations:
+    # plt.plot(obs.wave, obs.flux)
+    # plt.plot(obs.grid, obs.interp_flux)
+# plt.show()
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # CREATE NEW MODELS
@@ -86,22 +93,32 @@ for i in range(len(sightlines)):
         name = "prior_line" + str(j)
         sightline.add_line(name=name, source="Telluric", pars=line)
         par_name_d = "Telluric_" + name + "_d"
-        sightline.model_pars[par_name_d].set(value=0.05, min=0, max=10)
+        sightline.model_pars[par_name_d].set(value=0.05, min=-10, max=10)
 
     # sightline.fit(data=sightline.interp_flux, x=sightline.grid, report=True, plot=True)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Calculate sigma
-flat_xmin = 7667
-flat_xmax = 7668
+flat_xmin = 7662.25
+flat_xmax = 7663.6
 
 for sightline in sightlines:
     sigma_idx = np.where(
         np.logical_and(sightline.grid > flat_xmin, sightline.grid < flat_xmax)
     )
-    sightline.sigma = np.std(sightline.grid[sigma_idx])
+    sightline.sigma = np.std(sightline.interp_flux[sigma_idx])
+
     # print('Sigma: ', sightline.sigma)
+    # print('Weight: ', 1 / (sightline.sigma**2))
+
+
+    # plt.plot(sightline.grid, sightline.interp_flux)
+    # plt.hlines(np.mean(sightline.interp_flux[sigma_idx]), flat_xmin, flat_xmax)
+    # plt.hlines(np.mean(sightline.interp_flux[sigma_idx]) + sightline.sigma, flat_xmin, flat_xmax)
+    # plt.hlines(np.mean(sightline.interp_flux[sigma_idx]) - sightline.sigma, flat_xmin, flat_xmax)
+    # plt.show()
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # LOOP
@@ -112,13 +129,102 @@ def loop(sightlines, iteration, debug=False, plot=False):
 
     telluric_resids = []
     outs = []
+
+    print()
+    print()
+    print('################################################################')
+    print("Iteration ", iteration)
+    print('################################################################')
+
+
+
     for i in range(len(sightlines)):
         sightline = sightlines[i]
 
         print("Fitting sightline...")
-        sightline.fit(
-            data=sightline.interp_flux, x=sightline.grid, report=debug, plot=debug
-        )
+
+        try:
+            sightline.fit(
+                data=sightline.interp_flux,
+                x=sightline.grid,
+                report=debug,
+                plot=debug,
+                weights=1 / (np.ones_like(sightline.grid) * sightline.sigma**2),
+                method='least_squares'
+            )
+
+
+            # if not sightline.result.errorbars:
+                # print(sightline.result.aborted)
+                # print(sightline.result.message)
+                # print(sightline.result.errorbars)
+                # print(sightline.result.covar)
+
+
+            # print(sightline.result.covar)
+            if sightline.result.covar is None:
+
+                print()
+                print('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
+
+                # from numpy.dual import inv
+                # import numdifftools as ndt
+
+                # Hfun = ndt.Hessian(sightline.result.penalty, step=1e-4)
+
+                # hessian_ndt = Hfun(sightline.result.x)
+
+                # print(hessian_ndt)
+                # cov_x = inv(hessian_ndt) * 2.0
+
+                # print(cov_x)
+
+                print(sightline.result.aborted)
+                print(sightline.result.message)
+                print(sightline.result.errorbars)
+                print(sightline.result.covar)
+
+
+
+                from scipy.optimize import leastsq as scipy_leastsq
+
+                lskws = sightline.result.call_kws
+                print(lskws)
+
+                print(sightline.result.residual)
+                print(sightline.result.init_vals)
+
+
+                # print(sightline.result._Minimizer__residual)
+
+
+                lsout = scipy_leastsq(sightline.result._Minimizer__residual, sightline.result.init_vals, **lskws)
+
+
+                _best, _cov, _infodict, errmsg, ier = lsout
+
+                print(_cov)
+                print(_best)
+
+                # print(lsout)
+
+
+
+        except:
+            import traceback
+            traceback.print_exc()
+
+            print(sightline.result.covar)
+
+            out = sightline.model.eval(
+                data=sightline.interp_flux, params=sightline.result.params, x=sightline.grid
+            )
+            print(np.isfinite(out))
+
+            sys.exit()
+
+
+
         out = sightline.model.eval(
             data=sightline.interp_flux, params=sightline.result.params, x=sightline.grid
         )
@@ -127,7 +233,7 @@ def loop(sightlines, iteration, debug=False, plot=False):
         telluric_resid = sightline.interp_flux - out
         telluric_resids.append(telluric_resid)
 
-        # print(sightline.result.covar)
+        print('chi-sq: ', sightline.result.chisqr)
 
     # %%%%%%%%%%%%%%% Calculate barycentric model and residuals %%%%%%%%%%%%%%%
     bary_resids = []
@@ -183,6 +289,8 @@ def loop(sightlines, iteration, debug=False, plot=False):
             axs[i, 0].plot(sightline.grid, sightline.interp_flux)
             axs[i, 0].plot(sightline.grid, out)
             axs[i, 0].plot(sightline.grid, telluric_resid)
+            axs[i, 0].plot(sightline.grid, sightline.result.residual)
+
 
             axs[i, 1].plot(sightline.grid, sightline.interp_bary_flux)
             axs[i, 1].plot(bary_grid, bary_out_interp)
@@ -193,23 +301,28 @@ def loop(sightlines, iteration, debug=False, plot=False):
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Check to stop %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     stop(sightlines)
 
-    if len(sightline.answers) > 1:
+    total = 0
+    for sightline in sightlines:
 
-        if sightline.answers[-1] / sightline.answers[-2] > 1:
-            print(
-                str(len(sightline.answers))
-                + ' lines are better than '
-                + str(len(sightline.answers) - 1)
-            )
-
+        if len(sightline.peaks) > 3:
+            if sightline.answers[-1] / sightline.answers[-2] > 1:
+                total += 1
         else:
-            print(
-                str(len(sightline.answers))
-                + ' lines are NOT better than '
-                + str(len(sightline.answers) - 1)
-            )
-            sys.exit()
+            total += 1
 
+    if total >= 3:
+        print(
+            str(len(sightline.answers))
+            + ' lines are better than '
+            + str(len(sightline.answers) - 1)
+        )
+    else:
+        print(
+            str(len(sightline.answers))
+            + ' lines are NOT better than '
+            + str(len(sightline.answers) - 1)
+        )
+        sys.exit()
 
 
 
@@ -283,7 +396,10 @@ def loop(sightlines, iteration, debug=False, plot=False):
 
             # get position and tau_0 of new line
             lam_0 = sightline.grid[idx]
-            tau_0 = 0.2
+            if len(sightline.peaks) > 3:
+                tau_0 = 0.02
+            else:
+                tau_0 = 0.2
             line = {"lam_0": lam_0, "d": 0.01, "tau_0": tau_0}
             sightline.add_line(name=name, source=next_line, pars=line)
 
@@ -311,10 +427,16 @@ def loop(sightlines, iteration, debug=False, plot=False):
 
 def stop(sightlines):
 
+
     # get 'answer' in each sightline
     for i in range(len(sightlines)):
         sightline = sightlines[i]
         num_lines = len(sightlines[0].peaks)
+
+
+        print()
+
+
 
         # compute ranges for each line
         range_terms = []
@@ -352,27 +474,30 @@ def stop(sightlines):
         for term in range_terms:
             denominator_term = denominator_term * term
 
-        det = np.linalg.det(sightline.result.covar)
+        det = 0
+        try:
+            det = np.linalg.det(sightline.result.covar)
+        except np.linalg.LinAlgError:
+
+            if sightline.result.covar is None:
+                print('bad here')
+                print(sightline.result.covar)
+                print(sightline.result.errorbars)
+                print(sightline.result.message)
+
+
+        a = np.math.factorial(num_lines) / denominator_term
+        b = (4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2) / (np.sqrt(det))
+        c = np.exp(sightline.result.chisqr / 2)
+
+
+        answer = a * b * c
 
         # answer = (
-        #     np.math.factorial(num_lines)
-        #     / (
-        #         (lam_range * b_range * d_range * tau_range) ** num_lines
-        #         * c_range ** sightline.n_anchors
-        #     )
-        #     * (4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2)
-        #     / (np.sqrt(det))
+        #     np.math.factorial(num_lines) / denominator_term
+        #     * (4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2) / (np.sqrt(det))
         #     * np.exp(sightline.result.chisqr / 2)
         # )
-        # answers.append(answer)
-
-        answer = (
-            np.log(np.math.factorial(num_lines))
-            - np.log(denominator_term)
-            + np.log((4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2))
-            - np.log(np.sqrt(det))
-            - (sightline.result.chisqr / 2)
-        )
 
         try:
             sightline.answers.append(answer)
@@ -380,24 +505,17 @@ def stop(sightlines):
             sightline.answers = [answer]
 
 
-        print()
         print(sightline.datetime.date())
-        print(np.log(np.math.factorial(num_lines)))
-        print(np.log(denominator_term))
-        print(np.log((4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2)))
-        print(np.log(np.sqrt(det)))
-        print((sightline.result.chisqr / 2))
+        print('a: ', a)
+        print('b: ', b)
+        print('a * b: ', a * b)
+        print('c: ', c)
+        print('answer: ', answer)
 
         print(sightline.answers)
-
-
 
 
 for i in range(7):
     # print(sightlines[0].model_pars)
 
     loop(sightlines, i, debug=False, plot=False)
-
-
-
-
