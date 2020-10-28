@@ -68,20 +68,20 @@ wave, bary_wave, flux, bary_flux, grid, interp_flux, and interp_bary_flux attrib
                 name = 'line' + str(i)
                 sightline.add_line(name=name, source='O2', pars=line)
                 par_name_d = 'O2_' + name + '_d'
-                sightline.model_pars[par_name_d].set(value=0.05)
+                sightline.all_pars[par_name_d].set(value=0.05)
 
         sightline.fit(report=False, plot=plot)
 
-        out = sightline.model.eval(data=sightline.flux,
-                                   params=sightline.result.params,
-                                   x=sightline.wave)
+        out = sightline.complete_model.eval(data=sightline.flux,
+                                            params=sightline.result.params,
+                                            x=sightline.wave)
         resid = sightline.flux - out
         resids.append(resid)
         outs.append(out)
 
         errs = []
         lams = []
-        for name in sightline.model.param_names:
+        for name in sightline.complete_model.param_names:
             if name[-5:] == 'lam_0':
                 errs.append(sightline.result.params[name].stderr)
                 lams.append(sightline.result.params[name].value)
