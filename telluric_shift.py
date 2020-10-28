@@ -66,9 +66,10 @@ wave, bary_wave, flux, bary_flux, grid, interp_flux, and interp_bary_flux attrib
             line = linelist[i]
             if line['tau_0'] > tau_cutoff:
                 name = 'line' + str(i)
+                line['d'] = 0.05
                 sightline.add_line(name=name, source='O2', pars=line)
-                par_name_d = 'O2_' + name + '_d'
-                sightline.all_pars[par_name_d].set(value=0.05)
+                # par_name_d = 'O2_' + name + '_d'
+                # sightline.all_pars[par_name_d].set(value=0.05)
 
         sightline.fit(report=False, plot=plot)
 
