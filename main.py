@@ -5,13 +5,445 @@ import astropy.constants as cst
 from scipy.interpolate import interp1d
 from scipy.stats import f as scipy_f
 
-
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
 from edibles.sightline import Sightline
 
 from sourceseparation.telluric_shift import telluric_shift
 from sourceseparation.read_hitran import read_hitran, convert
 
+
+def fit_models(sightlines, iteration, method='leastsq', debug=False, verbose=0):
+
+
+    if verbose > 1:
+        report = True
+    elif debug is True:
+        report = True
+    else:
+        report = False
+
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+
+
+
+
+        sightline.out = sightline.complete_model.eval(
+            data=sightline.interp_flux, params=sightline.all_pars, x=sightline.grid
+        )
+
+
+        plt.plot(sightline.grid, sightline.interp_flux)
+        plt.plot(sightline.grid, sightline.out)
+        plt.show()
+
+
+
+
+
+        print("Fitting sightline...")
+
+        sightline.fit(
+            data=sightline.interp_flux,
+            x=sightline.grid,
+            report=report,
+            plot=debug,
+            weights=1 / (np.ones_like(sightline.grid) * sightline.sigma),
+            method=method
+        )
+
+        try:
+            sightline.chisqrs.append(sightline.result.chisqr)
+
+        except AttributeError:
+            sightline.chisqrs = [sightline.result.chisqr]
+
+
+        sightline.out = sightline.complete_model.eval(
+            data=sightline.interp_flux, params=sightline.result.params, x=sightline.grid
+        )
+
+        if debug:
+            my_chi_sq = np.sum(((sightline.out - sightline.interp_flux) / sightline.sigma)**2)
+            if np.abs(my_chi_sq - sightline.result.chisqr) > 1:
+                print()
+                print(my_chi_sq)
+                print(sightline.result.chisqr)
+                raise Exception('Chi-square from lmfit different from calculated Chi-square')
+                print()
+
+            # Check other errors
+            if 'Could not estimate' in sightline.result.message:
+                print()
+                raise Exception("Could not estimate error-bars")
+
+            if sightline.result.covar is None:
+                print()
+                print('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
+                print(sightline.result.aborted)
+                print(sightline.result.message)
+                print(sightline.result.errorbars)
+                print(sightline.result.covar)
+                print(sightline.result.fit_report())
+                print(sightline.result.params)
+                print()
+
+                raise Exception("No Covariance matrix")
+
+
+        sightline.telluric_resid = sightline.interp_flux - sightline.out
+
+        if verbose > 0 or debug:
+            print('chi-sq: ', sightline.result.chisqr)
+            print('reduced chi-sq: ', sightline.result.redchi)
+
+    # %%%%%%%%%%%%%%% Calculate barycentric model and residuals %%%%%%%%%%%%%%%
+
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+
+        # Shift grid to bary frame
+        sightline.bary_shift = (
+            sightline.grid
+            + (sightline.v_bary / cst.c.to("km/s").value) * sightline.grid
+        )
+
+    # find out where all sightlines overlap, and make new grid
+    bary_min = np.max([np.min(sightline.bary_shift) for sightline in sightlines])
+    bary_max = np.min([np.max(sightline.bary_shift) for sightline in sightlines])
+
+    grid_idx = np.where(
+        np.logical_and(sightline.raw_grid > bary_min, sightline.raw_grid < bary_max)
+    )
+    bary_grid = sightline.raw_grid[grid_idx]
+
+    # interpolate resid and model to spectrum grid
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+        sightline.bary_grid = bary_grid
+
+        f = interp1d(sightline.bary_shift, sightline.telluric_resid)
+        sightline.bary_resid_interp = f(sightline.bary_grid)
+
+        g = interp1d(sightline.bary_shift, sightline.out)
+        sightline.bary_out_interp = g(sightline.bary_grid)
+
+
+def check_stop(sightlines, iteration, stop_method, freeze_after, verbose=0):
+    total_bayes = 0
+    total_f = 0
+
+    # #########################
+    # BAYES MODEL COMPARISON
+
+    if stop_method == 'bayes':
+        posterior_calc(sightlines, verbose)
+
+        for sightline in sightlines:
+            if iteration > 0:
+                if sightline.posteriors[-1] > 0 and sightline.posteriors[-1] > 0:
+                    if sightline.posteriors[-1] / sightline.posteriors[-2] > 1:
+                        total_bayes += 1
+            else:
+                total_bayes += 1
+
+    # #########################
+    # F TEST
+
+    elif stop_method == 'f':
+        for sightline in sightlines:
+
+            df1 = 4  # number of new parameters in 'better' model
+            df2 = len(sightline.grid) - len(sightline.all_pars)
+
+            if iteration > 0:
+                num = (sightline.chisqrs[-2] - sightline.chisqrs[-1]) / df1
+                denom = sightline.chisqrs[-1] / df2
+                f = num / denom
+                print("f: ", f)
+
+                alpha = 0.05  # Or whatever you want your alpha to be.
+                p_value = scipy_f.cdf(f, df1, df2)
+                print("p: ", p_value)
+                if p_value > alpha:
+                    # Reject the null hypothesis that Var(X) == Var(Y)
+                    total_f += 1
+
+    # #########################
+
+    if total_bayes >= 3 or total_f >= 3:
+        print(
+            str(sightlines[0].n_lines)
+            + ' lines are better than '
+            + str(sightlines[0].n_lines - 1)
+        )
+
+        sightline.model_lag_one = sightline.complete_model
+
+        sightline.pars_lag_one = sightline.all_pars
+
+
+
+
+
+    else:
+        print("{} lines does not produce a better model than {} lines".format(
+            sightlines[0].n_lines, sightlines[0].n_lines - 1
+        ))
+
+        if freeze_after is not None:
+            print('Fitting one last time')
+            sightline.freeze(unfreeze=True)
+            sightline.fit(
+                data=sightline.interp_flux,
+                params=sightline.pars_lag_one,
+                model=sightline.model_lag_one,
+                x=sightline.grid,
+                report=True,
+                plot=True,
+                weights=1 / (np.ones_like(sightline.grid) * sightline.sigma),
+                method=method
+            )
+
+        for sightline in sightlines:
+            sightline.separate(data=sightline.interp_flux, x=sightline.grid)
+        sys.exit()
+
+
+def posterior_calc(sightlines, verbose=0):
+
+    # get posterior in each sightline
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+
+        # compute parameter ranges for each line and multiply
+        range_terms = []
+        for i in range(sightline.n_lines):
+
+            lam_name = sightline.peaks[i].name
+            b_name = lam_name.replace('lam_0', 'b')
+            d_name = lam_name.replace('lam_0', 'd')
+            tau_name = lam_name.replace('lam_0', 'tau_0')
+            # print(lam_name, b_name, d_name, tau_name)
+
+            lam_range = (
+                sightline.result.params[lam_name].max - sightline.result.params[lam_name].min
+            )
+            b_range = sightline.result.params[b_name].max - sightline.result.params[b_name].min
+            d_range = sightline.result.params[d_name].max - sightline.result.params[d_name].min
+            tau_range = (
+                sightline.result.params[tau_name].max - sightline.result.params[tau_name].min
+            )
+
+            range_term = lam_range * b_range * d_range * tau_range
+            range_terms.append(range_term)
+
+        # compute range for continuum parameters
+        c_ranges = []
+        for name in sightline.all_pars:
+            if 'y_' in name:
+                c_range = sightline.result.params[name].max - sightline.result.params[name].min
+                c_ranges.append(c_range)
+
+        # multiply range term for each line and continuum together
+        denominator_term = 1
+        for c_range in c_ranges:
+            denominator_term = denominator_term * c_range
+
+        for term in range_terms:
+            denominator_term = denominator_term * term
+
+        det = 0
+        try:
+            det = np.linalg.det(sightline.result.covar)
+        except np.linalg.LinAlgError:
+
+            if sightline.result.covar is None:
+                print()
+                print('bad here')
+                print(sightline.result.covar)
+                print(sightline.result.errorbars)
+                print(sightline.result.message)
+
+        a = np.math.factorial(sightline.n_lines) * \
+            (4 * np.pi)**((2 * sightline.n_lines + sightline.n_anchors) / 2)
+
+        b = denominator_term * (np.sqrt(det))
+        c = np.exp(-sightline.result.chisqr / 2)
+        posterior = a / b * c
+
+        try:
+            sightline.posteriors.append(posterior)
+        except AttributeError:
+            sightline.posteriors = [posterior]
+
+        if verbose > 0:
+            # print()
+            print('a: ', a)
+            print('b: ', b)
+            print('c: ', c)
+            print(sightline.posteriors)
+
+
+def plot_models(sightlines):
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Fit data
+    fig, axs = plt.subplots(5, 2, sharex=True)
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+
+
+        axs[i, 0].scatter(sightline.grid, sightline.interp_flux,
+                          color='k', marker='.', label='Observed data')
+        axs[i, 0].plot(sightline.grid, sightline.out, color='r', label='Model')
+        axs[i, 0].plot(sightline.grid, sightline.telluric_resid, color='g', label='Residual')
+        axs[i, 0].set_ylabel('Flux', fontsize=14)
+
+        axs[i, 1].scatter(sightline.grid, sightline.interp_bary_flux, color='k', marker='.')
+        axs[i, 1].plot(sightline.bary_grid, sightline.bary_out_interp, color='r')
+        axs[i, 1].plot(sightline.bary_grid, sightline.bary_resid_interp, color='g')
+
+    axs[0, 0].legend()
+    axs[4, 0].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+    axs[4, 1].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+
+    axs[0, 0].set_title('Geocentric Reference Frame', fontsize=14)
+    axs[0, 1].set_title('Barycentric Reference Frame', fontsize=14)
+
+    # plt.tight_layout()
+    plt.show()
+
+
+def likelihoods(sightlines):
+    # %%%%%%%%%%%%%%%%%%%%%%%%% Calculate likelihoods %%%%%%%%%%%%%%%%%%%%%%%%%
+
+    for i in range(len(sightlines)):
+        sightline = sightlines[i]
+
+        sightline.log_likelihood = np.log(1 / (sightline.sigma * np.sqrt(2 * np.pi))) + (
+            -((sightline.telluric_resid) ** 2 / (2 * sightline.sigma ** 2))
+        )
+
+        sightline.bary_log_likelihood = np.log(1 / (sightline.sigma * np.sqrt(2 * np.pi))) + (
+            -((sightline.bary_resid_interp) ** 2 / (2 * sightline.sigma ** 2))
+        )
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%% Co-add likelihoods %%%%%%%%%%%%%%%%%%%%%%%%%%%
+    coadd = np.ones_like(sightlines[0].grid)
+    bary_coadd = np.ones_like(sightlines[0].bary_grid)
+
+    for sightline in sightlines:
+
+        coadd *= sightline.log_likelihood
+        bary_coadd *= sightline.bary_log_likelihood
+
+
+    return coadd, bary_coadd
+
+
+def plot_likelihoods(sightlines, coadd, bary_coadd):
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Likelihoods
+    fig, axs = plt.subplots(1, 2)
+    for sightline in sightlines:
+        axs[0].plot(sightline.grid, sightline.log_likelihood)
+        axs[0].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+
+
+        axs[1].plot(sightline.bary_grid, sightline.bary_log_likelihood)
+        axs[1].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+
+    # plt.suptitle("Log-Likelihoods in each sightline")
+    axs[0].set_title('Geocentric Reference Frame', fontsize=14)
+    axs[1].set_title('Barycentric Reference Frame', fontsize=14)
+
+    plt.show()
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # coadded log-likelihoods
+    fig, axs = plt.subplots(1, 2)
+
+    axs[0].plot(sightlines[0].grid, coadd)
+    axs[0].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+
+    axs[1].plot(sightlines[0].bary_grid, bary_coadd)
+    axs[1].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+    axs[0].set_title('Geocentric Reference Frame', fontsize=14)
+    axs[1].set_title('Barycentric Reference Frame', fontsize=14)
+
+    plt.show()
+
+
+def add_next_line(sightlines, coadd, bary_coadd):
+
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%% Compare co-adds %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if np.min(coadd) < np.min(bary_coadd):
+        next_source = "Telluric"
+    else:
+        next_source = "Nontelluric"
+
+    name_next = "line" + str(sightlines[0].n_lines)
+
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Add new line %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if next_source == "Telluric":
+        idx = np.argmin(coadd)
+
+        for sightline in sightlines:
+            assert np.min(sightline.interp_flux[idx]) == sightline.interp_flux[idx]
+
+        for i in range(len(sightlines)):
+            sightline = sightlines[i]
+
+            # get position and tau_0 of new line
+            lam_0 = sightline.grid[idx]
+            d = 0.1
+            tau_0 = 0.01
+            line = {"lam_0": lam_0, "d": d, "tau_0": tau_0}
+            sightline.add_line(name=name_next, source=next_source, pars=line)
+
+    elif next_source == "Nontelluric":
+        idx = np.argmin(bary_coadd)
+
+        for i in range(len(sightlines)):
+            sightline = sightlines[i]
+
+            # get position and tau_0 of new line
+            bary_lam_0 = sightline.bary_grid[idx]
+            lam_0 = (
+                bary_lam_0 - (sightline.v_bary / cst.c.to("km/s").value) * bary_lam_0
+            )
+            b = 1.2
+
+            # Lifetime broadening of K_I lines - constant value
+            K_Gamma = 3.820e7
+            K_d = K_Gamma * lam_0**2 / (4 * np.pi * (cst.c.to("cm/s").value * 1e8))
+
+
+            if sightline.n_lines > 3:
+                tau_0 = 0.1
+            else:
+                tau_0 = 0.05
+            line = {"lam_0": lam_0, "b": b, "d": K_d, "tau_0": tau_0}
+            sightline.add_line(name=name_next, source=next_source, pars=line)
+
+            sightline.all_pars[next_source + '_' + name_next + '_d'].set(vary=False)
+
+
+    else:
+        print("Something bad happened...")
+        sys.exit()
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# SET PARAMS
+method = 'leastsq'
+debug = False
+verbose = 2
+stop_method = 'bayes'
+freeze_after = None
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # IMPORT DATA
@@ -40,23 +472,8 @@ zoom_xmax = 7669
 
 # Shift spectra
 observations = telluric_shift(
-    observations, xmin=xmin, xmax=xmax, zoom_xmin=zoom_xmin, zoom_xmax=zoom_xmax
+    observations, xmin=xmin, xmax=xmax, zoom_xmin=zoom_xmin, zoom_xmax=zoom_xmax, molecule='O2'
 )
-
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# NORMALIZE
-
-# for obs in observations:
-#     obs.raw_flux = obs.raw_flux / np.max(obs.raw_flux)
-#     obs.flux = obs.flux / np.max(obs.flux)
-#     obs.interp_flux = obs.interp_flux / np.max(obs.interp_flux)
-#     obs.interp_bary_flux = obs.interp_bary_flux / np.max(obs.interp_bary_flux)
-
-
-# for obs in observations:
-#     plt.plot(obs.wave, obs.flux)
-#     plt.plot(obs.grid, obs.interp_flux)
-# plt.show()
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # CREATE NEW MODELS
@@ -64,44 +481,12 @@ observations = telluric_shift(
 sightlines = []
 for i in range(len(observations)):
     sp = observations[i]
-    sightline = Sightline(sp, n_anchors=6)
+    sightline = Sightline(sp, n_anchors=4)
     sightlines.append(sightline)
-
-# Re-find O2 lines from HITRAN data
-pars_list = convert(read_hitran("telluric_lines_HITRAN.txt"))
-
-# Set tau_cutoff (0.4, 0.02, or 0.0)
-tau_cutoff = 0.4
-
-# Create linelist
-linelist = []
-for pars in pars_list:
-    if (zoom_xmin < pars["lam_0"]) and (pars["lam_0"] < zoom_xmax):
-        if pars["tau_0"] > tau_cutoff:
-            linelist.append(pars)
-linelist.reverse()
-print(linelist)
-
-# Add prior telluric lines to models
-for i in range(len(sightlines)):
-    sightline = sightlines[i]
-
-    # # Geocentric
-    # sightline.add_source(name="Telluric", similar={"b": 0.6})
-    # sightline.add_source(name='Barycentric', similar={'b': 1.5})
-    for j in range(len(linelist)):
-        line = linelist[j].copy()
-        name = "line" + str(j)
-        line['d'] = 0.05
-        sightline.add_line(name=name, source="Telluric", pars=line)
-        # par_name_d = "Telluric_" + name + "_d"
-        # sightline.model_pars[par_name_d].set(value=0.05, min=0, max=10)
-
-    # sightline.fit(data=sightline.interp_flux, x=sightline.grid, report=True, plot=True)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# Calculate sigma
+# CALCULATE SIGMA
 flat_xmin = 7662.25
 flat_xmax = 7663.6
 
@@ -111,507 +496,84 @@ for sightline in sightlines:
     )
     sightline.sigma = np.std(sightline.interp_flux[sigma_idx])
 
-    print('Sigma: ', sightline.sigma)
-    # print('Weight: ', 1 / (sightline.sigma**2))
-
-
-    # plt.plot(sightline.grid, sightline.interp_flux)
-    # plt.hlines(np.mean(sightline.interp_flux[sigma_idx]), flat_xmin, flat_xmax)
-    # plt.hlines(np.mean(sightline.interp_flux[sigma_idx]) + sightline.sigma, flat_xmin, flat_xmax)
-    # plt.hlines(np.mean(sightline.interp_flux[sigma_idx]) - sightline.sigma, flat_xmin, flat_xmax)
-    # plt.show()
+    if verbose > 1:
+        print('Sigma: ', sightline.sigma)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# LOOP
+# GET PRIOR DATA
 
-def loop(sightlines, iteration, method='leastsq', debug=False, plot=False):
+# Re-find O2 lines from HITRAN data
+pars_list = convert(read_hitran("telluric_lines_HITRAN.txt", molecule='O2'))
+
+# Set tau_cutoff (0.4, 0.02, or 0.0) (0.4 works, others still under development)
+tau_cutoff = 0.4
+
+# Create linelist
+linelist = []
+for pars in pars_list:
+    if (zoom_xmin < pars["lam_0"]) and (pars["lam_0"] < zoom_xmax):
+        if pars["tau_0"] > tau_cutoff:
+            linelist.append(pars)
+linelist.reverse()
+if verbose > 1:
+    print('Prior Linelist:')
+    print(linelist)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# ADD PRIOR DATA TO MODELS
+for i in range(len(sightlines)):
+    sightline = sightlines[i]
+
+    # # Geocentric
+    # sightline.add_source(name="Telluric", similar={"b": 0.6})
+    for j in range(len(linelist)):
+        line = linelist[j].copy()
+        name = "line" + str(j)
+        line['d'] = 0.1
+        sightline.add_line(name=name, source="Telluric", pars=line)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# ITERATE
+
+for iteration in range(12):
+
+    print()
+    print('################################################################')
+    print("Iteration {}, calculating with {} lines".format(iteration, sightlines[0].n_lines))
+    print('################################################################')
+    print()
 
     # %%%%%%%%%%%%%%%% Fit geocentric model and get residuals %%%%%%%%%%%%%%%%%
+    fit_models(sightlines, iteration=iteration, method=method, debug=debug, verbose=verbose)
 
-    telluric_resids = []
-    outs = []
-
-    print()
-    print()
-    print('################################################################')
-    print("Iteration ", iteration)
-    print('################################################################')
-
-
-
-    for i in range(len(sightlines)):
-        sightline = sightlines[i]
-
-        print("Fitting sightline...")
-
-        sightline.fit(
-            data=sightline.interp_flux,
-            x=sightline.grid,
-            report=debug,
-            plot=debug,
-            weights=1 / (np.ones_like(sightline.grid) * sightline.sigma),
-            method=method
-        )
-
-
-        try:
-            sightline.chisqrs.append(sightline.result.chisqr)
-
-        except AttributeError:
-            sightline.chisqrs = [sightline.result.chisqr]
-
-
-
-        # Make sure chi-square calculated from lmfit is correct
-        out = sightline.complete_model.eval(
-            data=sightline.interp_flux, params=sightline.result.params, x=sightline.grid
-        )
-        my_chi_sq = np.sum(((out - sightline.interp_flux) / sightline.sigma)**2)
-        if np.abs(my_chi_sq - sightline.result.chisqr) > 1:
-            print()
-            print(my_chi_sq)
-            print(sightline.result.chisqr)
-            raise Exception('Chi-square from lmfit different from calculated Chi-square')
-            print()
-
-        # Check other errors
-        if 'Could not estimate' in sightline.result.message:
-            print()
-            raise Exception("Could not estimate error-bars")
-            print()
-
-        if sightline.result.covar is None:
-            print()
-
-            print()
-            print('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
-            print(sightline.result.aborted)
-            print(sightline.result.message)
-            print(sightline.result.errorbars)
-            print(sightline.result.covar)
-            print(sightline.result.fit_report())
-            print(sightline.result.params)
-            print()
-
-
-            out2 = sightline.complete_model.eval(
-                data=sightline.interp_flux, params=sightline.model_pars, x=sightline.grid
-            )
-
-            plt.plot(sightline.grid, sightline.interp_flux)
-            plt.plot(sightline.grid, out2)
-            plt.show()
-            raise Exception("No Covariance matrix")
-
-            # if method == 'leastsq':
-                # print()
-                # print("leastsq path")
-
-                # from scipy.optimize import leastsq as scipy_leastsq
-
-                # lskws = sightline.result.call_kws
-
-                # print(lskws)
-                # print(sightline.result.residual)
-                # print(sightline.result.init_vals)
-
-                # lsout = scipy_leastsq(
-                #     sightline.result._Minimizer__residual,
-                #     sightline.result.init_vals,
-                #     **lskws
-                # )
-                # _best, _cov, _infodict, errmsg, ier = lsout
-
-                # print(_cov)
-                # print(_best)
-
-                # # print(lsout)
-                # print()
-
-
-            # elif method == 'least_squares':
-                # print()
-                # print("least_squares path")
-
-                # from numpy.dual import inv
-                # import numdifftools as ndt
-
-                # Hfun = ndt.Hessian(sightline.result.penalty, step=1e-4)
-                # hessian_ndt = Hfun(sightline.result.x)
-
-                # print(hessian_ndt)
-
-                # cov_x = inv(hessian_ndt) * 2.0
-
-                # print(cov_x)
-                # print()
-
-
-            # import traceback
-            # traceback.print_exc()
-
-
-        out = sightline.complete_model.eval(
-            data=sightline.interp_flux, params=sightline.result.params, x=sightline.grid
-        )
-        outs.append(out)
-
-        telluric_resid = sightline.interp_flux - out
-        telluric_resids.append(telluric_resid)
-
-        print('chi-sq: ', sightline.result.chisqr)
-
-    # %%%%%%%%%%%%%%% Calculate barycentric model and residuals %%%%%%%%%%%%%%%
-    bary_resids = []
-    bary_outs = []
-    bary_shifts = []
-
-    for i in range(len(sightlines)):
-        sightline = sightlines[i]
-        telluric_resid = telluric_resids[i]
-        out = outs[i]
-
-        # Shift grid to bary frame
-        bary_shift = (
-            sightline.grid
-            + (sightline.v_bary / cst.c.to("km/s").value) * sightline.grid
-        )
-        bary_shifts.append(bary_shift)
-
-    # find out where all sightlines overlap, and make new grid
-    bary_min = np.max([np.min(bary_shift) for bary_shift in bary_shifts])
-    bary_max = np.min([np.max(bary_shift) for bary_shift in bary_shifts])
-
-    grid_idx = np.where(
-        np.logical_and(sightline.raw_grid > bary_min, sightline.raw_grid < bary_max)
-    )
-    bary_grid = sightline.raw_grid[grid_idx]
-
-    # interpolate resid and model to spectrum grid
-    for i in range(len(sightlines)):
-        sightline = sightlines[i]
-        telluric_resid = telluric_resids[i]
-        out = outs[i]
-        bary_shift = bary_shifts[i]
-
-        f = interp1d(bary_shift, telluric_resid)
-        bary_resid_interp = f(bary_grid)
-        bary_resids.append(bary_resid_interp)
-
-        g = interp1d(bary_shift, out)
-        bary_out_interp = g(bary_grid)
-        bary_outs.append(bary_out_interp)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Check to stop %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    total = 0
-
-    # #########################
-    # BAYES MODEL COMPARISON
-    # stop(sightlines)
-
-    # for sightline in sightlines:
-
-    #     if len(sightline.peaks) > 4:
-    #         if sightline.answers[-1] / sightline.answers[-2] > 1:
-    #             total += 1
-    #     else:
-    #         total += 1
+    check_stop(sightlines, iteration=iteration, stop_method=stop_method,
+               freeze_after=freeze_after, verbose=1)
 
 
-
-    # #########################
-    # F TEST
-    # difference in chisqr of 0 and -1 / redchi of 0
-    print()
-    for sightline in sightlines:
-
-        param_difference = 4
-
-        if iteration > 0:
-            num = (sightline.chisqrs[-2] - sightline.chisqrs[-1]) / param_difference
-            denom = sightline.result.redchi
-            f = num / denom
-            print("f: ", f)
-
-
-            df1 = 4  # number of new parameters in 'better' model
-            df2 = len(sightline.grid) - len(sightline.all_pars)
-
-            alpha = 0.05  # Or whatever you want your alpha to be.
-            p_value = scipy_f.cdf(f, df1, df2)
-            print("p: ", p_value)
-            if p_value > alpha:
-                # Reject the null hypothesis that Var(X) == Var(Y)
-                total += 1
-
-
-    # if we_should_probably_stop_now:
-    #     separate(sightlines)
-
-    if sightlines[0].n_lines > 3:
-        if total >= 3:
-            print(
-                str(sightlines[0].n_lines)
-                + ' lines are better than '
-                + str(sightlines[0].n_lines - 1)
-            )
-        else:
-            print(
-                str(sightlines[0].n_lines)
-                + ' lines are NOT better than '
-                + str(sightlines[0].n_lines - 1)
-            )
-            for sightline in sightlines:
-                sightline.separate(data=sightline.interp_flux, x=sightline.grid)
-            sys.exit()
-
-
-    # %%%%%%%%%%%%%%%%%%%%%%%%% Calculate likelihoods %%%%%%%%%%%%%%%%%%%%%%%%%
-    likelihoods = []
-    bary_likelihoods = []
-    for i in range(len(sightlines)):
-        resid = telluric_resids[i]
-        bary_resid = bary_resids[i]
-        sightline = sightlines[i]
-
-        log_likelihood = np.log(1 / (sightline.sigma * np.sqrt(2 * np.pi))) + (
-            -((resid) ** 2 / (2 * sightline.sigma ** 2))
-        )
-
-        bary_log_likelihood = np.log(1 / (sightline.sigma * np.sqrt(2 * np.pi))) + (
-            -((bary_resid) ** 2 / (2 * sightline.sigma ** 2))
-        )
-
-        likelihoods.append(log_likelihood)
-        bary_likelihoods.append(bary_log_likelihood)
-
-    # %%%%%%%%%%%%%%%%%%%%%%% Co-add residuals and plot %%%%%%%%%%%%%%%%%%%%%%%
-    coadd = np.ones_like(sightlines[0].grid)
-    bary_coadd = np.ones_like(bary_grid)
-
-    for i in range(len(sightlines)):
-        likelihood = likelihoods[i]
-        bary_likelihood = bary_likelihoods[i]
-
-        coadd *= likelihood
-        bary_coadd *= bary_likelihood
-
-    # %%%%%%%%%%%%%%%%%%%%%%%%%%%% Compare co-adds %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if np.min(coadd) < np.min(bary_coadd):
-        next_source = "Telluric"
-    else:
-        next_source = "Nontelluric"
-
-    name_next = "line" + str(sightlines[0].n_lines)
-
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Plotting %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    plot_models(sightlines)
 
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Freeze %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-    for sightline in sightlines:
-        if sightline.n_lines == 5:
-            print()
-            print("FREEZING!")
-            sightline.freeze()
-
-
-    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Add new line %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if next_source == "Telluric":
-        idx = np.argmin(coadd)
-
+    if freeze_after is not None:
         for sightline in sightlines:
-            assert np.min(sightline.interp_flux[idx]) == sightline.interp_flux[idx]
+            if sightline.n_lines == freeze_after:
+                print("FREEZING sightline after " + str(freeze_after) + " lines")
+                sightline.freeze()
 
-        for i in range(len(sightlines)):
-            sightline = sightlines[i]
 
-            # get position and tau_0 of new line
-            lam_0 = sightline.grid[idx]
-            if sightline.n_lines > 3:
-                tau_0 = 0.005
-            else:
-                tau_0 = 0.2
-            line = {"lam_0": lam_0, "d": 0.01, "tau_0": tau_0}
-            sightline.add_line(name=name_next, source=next_source, pars=line)
+    # %%%%%%%%%%%%%%%%%%%% Calculate and coadd likelihoods %%%%%%%%%%%%%%%%%%%%
+    coadd, bary_coadd = likelihoods(sightlines)
 
-    elif next_source == "Nontelluric":
-
-        idx = np.argmin(bary_coadd)
-
-        for i in range(len(sightlines)):
-            sightline = sightlines[i]
-
-            # get position and tau_0 of new line
-            bary_lam_0 = bary_grid[idx]
-            lam_0 = (
-                bary_lam_0 - (sightline.v_bary / cst.c.to("km/s").value) * bary_lam_0
-            )
-
-            if sightline.n_lines > 4:
-                tau_0 = 0.001
-            else:
-                tau_0 = 0.1
-            line = {"lam_0": lam_0, "b": 1.5, "d": 0.001, "tau_0": tau_0}
-            sightline.add_line(name=name_next, source=next_source, pars=line)
-
-    else:
-        print("Something bad happened...")
-        sys.exit()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Plotting %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if plot:
-
-        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        # Fit data
-        fig, axs = plt.subplots(5, 2, sharex=True)
-        for i in range(len(sightlines)):
-            sightline = sightlines[i]
-            out = outs[i]
-            bary_out_interp = bary_outs[i]
-            telluric_resid = telluric_resids[i]
-            bary_resid_interp = bary_resids[i]
-
-            for peak in sightline.peaks:
-                if 'Nontelluric' in peak.name:
-                    c = 'r'
-                    label = 'Non-Telluric lines'
-                else:
-                    c = 'g'
-                    label = 'Telluric lines'
-
-                if sightline.most_recent in peak.name:
-                    c = 'm'
-                    label = 'Next line - not fit yet'
-
-                axs[i, 0].vlines(
-                    peak.value,
-                    ymin=np.min(sightline.interp_flux),
-                    ymax=np.max(sightline.interp_flux),
-                    color=c,
-                    label=label
-                )
-
-            axs[i, 0].plot(sightline.grid, sightline.interp_flux)
-            axs[i, 0].plot(sightline.grid, out)
-            axs[i, 0].plot(sightline.grid, telluric_resid)
-            axs[i, 0].plot(sightline.grid, sightline.result.residual)
-
-            axs[i, 1].plot(sightline.grid, sightline.interp_bary_flux)
-            axs[i, 1].plot(bary_grid, bary_out_interp)
-            axs[i, 1].plot(bary_grid, bary_resid_interp)
-        plt.show()
-
-        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        # Likelihoods
-        fig, axs = plt.subplots(1, 2)
-        for i in range(len(likelihoods)):
-            likelihood = likelihoods[i]
-            axs[0].plot(sightline.grid, likelihood)
-            axs[0].set_xlabel("Geocentric")
-
-            bary_likelihood = bary_likelihoods[i]
-            axs[1].plot(bary_grid, bary_likelihood)
-            axs[1].set_xlabel("Barycentric")
-
-        plt.suptitle("Log-Likelihoods in each sightline")
-        plt.show()
-
-        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        # Residuals
-        fig, axs = plt.subplots(1, 2)
-
-        axs[0].plot(sightlines[0].grid, coadd, label="Geocentric")
-        axs[1].plot(bary_grid, bary_coadd, label="Barycentric")
-        plt.suptitle("Coadded log-likelihoods")
-        plt.legend()
-        plt.show()
+    plot_likelihoods(sightlines, coadd, bary_coadd)
 
 
-def stop(sightlines):
-
-
-    # get 'answer' in each sightline
-    for i in range(len(sightlines)):
-        sightline = sightlines[i]
-        num_lines = len(sightline.peaks)
-
-        # compute parameter ranges for each line and multiply
-        range_terms = []
-        for i in range(num_lines):
-
-            lam_name = sightline.peaks[i].name
-            b_name = lam_name.replace('lam_0', 'b')
-            d_name = lam_name.replace('lam_0', 'd')
-            tau_name = lam_name.replace('lam_0', 'tau_0')
-            # print(lam_name, b_name, d_name, tau_name)
-
-            lam_range = sightline.result.params[lam_name].max - sightline.result.params[lam_name].min
-            b_range = sightline.result.params[b_name].max - sightline.result.params[b_name].min
-            d_range = sightline.result.params[d_name].max - sightline.result.params[d_name].min
-            tau_range = sightline.result.params[tau_name].max - sightline.result.params[tau_name].min
-
-            range_term = lam_range * b_range * d_range * tau_range
-            range_terms.append(range_term)
-
-        # compute range for continuum parameters
-        c_ranges = []
-        for name in sightline.model_pars:
-            if 'y_' in name:
-                c_range = sightline.result.params[name].max - sightline.result.params[name].min
-                c_ranges.append(c_range)
-
-        # multiply range term for each line and continuum together
-        denominator_term = 1
-        for c_range in c_ranges:
-            denominator_term = denominator_term * c_range
-
-        for term in range_terms:
-            denominator_term = denominator_term * term
-
-        det = 0
-        try:
-            det = np.linalg.det(sightline.result.covar)
-        except np.linalg.LinAlgError:
-
-            if sightline.result.covar is None:
-                print()
-                print('bad here')
-                print(sightline.result.covar)
-                print(sightline.result.errorbars)
-                print(sightline.result.message)
-
-        a = np.math.factorial(num_lines) / denominator_term
-        b = (4 * np.pi) ** ((2 * num_lines + sightline.n_anchors) / 2) / (np.sqrt(det))
-        c = np.exp(sightline.result.redchi / 2)
-        answer = a * b * c
-
-        try:
-            sightline.answers.append(answer)
-        except AttributeError:
-            sightline.answers = [answer]
-
-        print()
-        print(sightline.datetime.date())
-        print('a: ', a)
-        print('b: ', b)
-        print('a * b: ', a * b)
-        print('c: ', c)
-        print('answer: ', answer)
-        print(sightline.answers)
-
-
-
-
-for i in range(12):
-
-    loop(sightlines, i, method='least_squares', debug=False, plot=True)
-
-
-
-
-for sightline in sightlines:
-    sightline.separate(data=sightline.interp_flux, x=sightline.grid)
-sys.exit()
+    # %%%%%%%%%%%%%%%%%%% Compare coaddsd and add new line %%%%%%%%%%%%%%%%%%%%
+    add_next_line(sightlines, coadd, bary_coadd)
