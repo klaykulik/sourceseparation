@@ -110,11 +110,7 @@ def telluric_shift(observations, xmin, xmax, zoom_xmin, zoom_xmax, molecule='O2'
         errs = errs_list[i]
         shift_resid = shift_resids[i]
 
-        # weights = np.mean(shift_resids[i]) -
-        # np.abs(np.mean(shift_resids[i]) - shift_resids[i])
-        # weights = 1 / shift_resids[i]
-        spl = UnivariateSpline(reals, shift_resids[i])
-        # spl.set_smoothing_factor(5)
+        spl = UnivariateSpline(reals, shift_resid)
 
         if plot:
             plt.errorbar(reals, shift_resid, yerr=errs, fmt='o', c=cs[i],
@@ -132,6 +128,11 @@ def telluric_shift(observations, xmin, xmax, zoom_xmin, zoom_xmax, molecule='O2'
         plt.legend()
         plt.show()
 
+    zoom_reals = []
+    for real in reals:
+        if (zoom_xmin < real) and (real < zoom_xmax):
+            zoom_reals.append(real)
+
     for i in range(len(observations)):
         sp = observations[i]
         shift = shifts[i]
@@ -139,8 +140,12 @@ def telluric_shift(observations, xmin, xmax, zoom_xmin, zoom_xmax, molecule='O2'
 
     if plot:
         for sp in observations:
-            plt.plot(sp.wave, sp.flux)
-        plt.scatter(reals, np.zeros_like(reals), c='k', label='HITRAN data')
+            plt.plot(sp.wave, sp.flux / np.max(sp.flux), label=sp.datetime.date())
+        plt.scatter(zoom_reals, np.zeros_like(zoom_reals), c='k', label='HITRAN data')
+        plt.legend()
+        plt.xlabel(r'Wavelength ($\AA$)', fontsize=14)
+        plt.ylabel('Normalized Flux', fontsize=14)
+        plt.tick_params(axis='both', labelsize=12)
         plt.show()
 
     return observations
@@ -174,7 +179,7 @@ if __name__ == '__main__':
         # CORRECT TELLURIC SHIFT
 
         observations = telluric_shift(observations, xmin=xmin, xmax=xmax,
-                                      zoom_xmin=7661, zoom_xmax=7670, molecule='O2')
+                                      zoom_xmin=7657, zoom_xmax=7663, molecule='O2', plot=True)
 
         for sp in observations:
             # plt.plot(sp.wave, sp.flux)
