@@ -3,6 +3,9 @@ import numpy as np
 
 from edibles.utils.edibles_spectrum import EdiblesSpectrum
 
+from sourceseparation.telluric_shift import telluric_shift
+from sourceseparation.read_hitran import read_hitran, convert
+
 
 def reference_frames():
 
@@ -176,8 +179,8 @@ def bayes():
     n_trials = [0, 1, 2, 3, 4, 100]
     data = stats.bernoulli.rvs(A, size=n_trials[-1])
     x = np.linspace(0, 1, 100)
-    prior_list = []
-    heads_list = []
+    # prior_list = []
+    # heads_list = []
     # For the already prepared, I'm using Binomial's conj. prior.
     # for k, N in enumerate(n_trials):
     #     heads = data[:N].sum()
@@ -190,43 +193,43 @@ def bayes():
     # for i in range(len(prior_list)):
 
 
-        # if i > 0:
-        #     # prior
-        #     plt.plot(x, prior_list[i - 1], label="Prior")
-        #     plt.fill_between(x, 0, prior_list[i - 1], color="C0", alpha=0.25)
-        #     plt.vlines(0.5, 0, 4, color="k", linestyles="--", lw=1)
-        #     plt.xlabel("$p$, probability of heads", fontsize=14)
-        #     plt.xticks(fontsize=12)
-        #     plt.yticks(fontsize=12)
-        #     plt.autoscale(tight=True)
-        #     plt.show()
+    #     if i > 0:
+    #         # prior
+    #         plt.plot(x, prior_list[i - 1], label="Prior")
+    #         plt.fill_between(x, 0, prior_list[i - 1], color="C0", alpha=0.25)
+    #         plt.vlines(0.5, 0, 4, color="k", linestyles="--", lw=1)
+    #         plt.xlabel("$p$, probability of heads", fontsize=14)
+    #         plt.xticks(fontsize=12)
+    #         plt.yticks(fontsize=12)
+    #         plt.autoscale(tight=True)
+    #         plt.show()
 
-        #     # likelihood
-        #     plt.plot(x, prior_list[i], label="Likelihood")
-        #     plt.fill_between(x, 0, prior_list[i], color="C1", alpha=0.25)
-        #     plt.vlines(0.5, 0, 4, color="k", linestyles="--", lw=1)
-        #     plt.xlabel("$p$, probability of heads", fontsize=14)
-        #     plt.xticks(fontsize=12)
-        #     plt.yticks(fontsize=12)
-        #     plt.autoscale(tight=True)
+    #         # likelihood
+    #         plt.plot(x, prior_list[i], label="Likelihood")
+    #         plt.fill_between(x, 0, prior_list[i], color="C1", alpha=0.25)
+    #         plt.vlines(0.5, 0, 4, color="k", linestyles="--", lw=1)
+    #         plt.xlabel("$p$, probability of heads", fontsize=14)
+    #         plt.xticks(fontsize=12)
+    #         plt.yticks(fontsize=12)
+    #         plt.autoscale(tight=True)
 
-        #     # posterior
-        #     plt.plot(x, prior_list[i] * prior_list[i - 1], linestyle='--', label="Posterior")
-        #     plt.fill_between(x, 0, prior_list[i] * prior_list[i - 1], color="C2", alpha=0.25)
-        #     plt.vlines(0.5, 0, 4, color="k", linestyles="--", lw=1)
-        #     plt.xlabel("$p$, probability of heads", fontsize=14)
-        #     plt.xticks(fontsize=12)
-        #     plt.yticks(fontsize=12)
-        #     plt.autoscale(tight=True)
+    #         # posterior
+    #         plt.plot(x, prior_list[i] * prior_list[i - 1], linestyle='--', label="Posterior")
+    #         plt.fill_between(x, 0, prior_list[i] * prior_list[i - 1], color="C2", alpha=0.25)
+    #         plt.vlines(0.5, 0, 4, color="k", linestyles="--", lw=1)
+    #         plt.xlabel("$p$, probability of heads", fontsize=14)
+    #         plt.xticks(fontsize=12)
+    #         plt.yticks(fontsize=12)
+    #         plt.autoscale(tight=True)
 
 
-        #     plt.legend(fontsize=14)
-        #     plt.show()
+    #         plt.legend(fontsize=14)
+    #         plt.show()
 
 
     # For the already prepared, I'm using Binomial's conj. prior.
     for k, N in enumerate(n_trials):
-        sx = plt.subplot(len(n_trials)/2, 2, k+1)
+        sx = plt.subplot(len(n_trials) / 2, 2, k + 1)
         plt.xlabel("Probability of heads") \
             if (k == 4 or k == 5) else None
         plt.setp(sx.get_yticklabels(), visible=False)
@@ -241,7 +244,6 @@ def bayes():
         # plt.autoscale(tight=True)
     plt.tight_layout()
     plt.show()
-
 
 
 def coadding():
@@ -313,6 +315,73 @@ def coadding():
     plt.show()
 
 
+def telluric_shift_plots():
+
+    file1 = "/HD170740/RED_860/HD170740_w860_redl_20140915_O12.fits"
+    file2 = "/HD170740/RED_860/HD170740_w860_redl_20140916_O12.fits"
+    file3 = "/HD170740/RED_860/HD170740_w860_redl_20150626_O12.fits"
+    file4 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
+    file5 = "/HD170740/RED_860/HD170740_w860_redl_20170705_O12.fits"
+
+    xmin = 7640
+    xmax = 7680
+    zoom_xmin = 7658
+    zoom_xmax = 7662
+
+    sp1 = EdiblesSpectrum(file1)
+    sp2 = EdiblesSpectrum(file2)
+    sp3 = EdiblesSpectrum(file3)
+    sp4 = EdiblesSpectrum(file4)
+    sp5 = EdiblesSpectrum(file5)
+    observations = [sp1, sp2, sp3, sp4, sp5]
+
+    pars_list = convert(read_hitran("telluric_lines_HITRAN.txt", molecule='O2'))
+
+    linevals = []
+    for pars in pars_list:
+        if (zoom_xmin < pars["lam_0"]) and (pars["lam_0"] < zoom_xmax):
+            if pars['tau_0'] > 0.4:
+                linevals.append(pars["lam_0"])
+
+    fig, axs = plt.subplots(1, 2)
+    for sp in observations:
+        sp.getSpectrum(xmin=zoom_xmin, xmax=zoom_xmax)
+        axs[0].plot(sp.wave, sp.flux / np.max(sp.flux), label=sp.datetime.date())
+
+    axs[0].scatter(linevals, np.zeros_like(linevals), c='k', label='HITRAN data')
+    axs[0].legend()
+    axs[0].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+    axs[0].set_ylabel('Normalized Flux', fontsize=14)
+    axs[0].tick_params(axis='both', labelsize=12)
+
+    sp1 = EdiblesSpectrum(file1)
+    sp2 = EdiblesSpectrum(file2)
+    sp3 = EdiblesSpectrum(file3)
+    sp4 = EdiblesSpectrum(file4)
+    sp5 = EdiblesSpectrum(file5)
+    observations = [sp1, sp2, sp3, sp4, sp5]
+
+    observations = telluric_shift(observations, xmin=xmin, xmax=xmax, zoom_xmin=zoom_xmin,
+                                  zoom_xmax=zoom_xmax, molecule='O2', plot=False)
+
+    for sp in observations:
+        axs[1].plot(sp.wave, sp.flux / np.max(sp.flux), label=sp.datetime.date())
+
+    axs[1].scatter(linevals, np.zeros_like(linevals), c='k', label='HITRAN data')
+    axs[1].legend()
+    axs[1].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+    axs[1].set_ylabel('Normalized Flux', fontsize=14)
+    axs[1].tick_params(axis='both', labelsize=12)
+
+
+
+
+
+    plt.show()
+
+
+
+
 
 if __name__ == "__main__":
 
@@ -325,4 +394,7 @@ if __name__ == "__main__":
 
     # bayes()
 
-    coadding()
+    # coadding()
+
+
+    telluric_shift_plots()
