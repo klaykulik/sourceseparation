@@ -26,21 +26,6 @@ def fit_models(sightlines, iteration, method='leastsq', debug=False, verbose=0):
         sightline = sightlines[i]
 
 
-
-
-        sightline.out = sightline.complete_model.eval(
-            data=sightline.interp_flux, params=sightline.all_pars, x=sightline.grid
-        )
-
-
-        plt.plot(sightline.grid, sightline.interp_flux)
-        plt.plot(sightline.grid, sightline.out)
-        plt.show()
-
-
-
-
-
         print("Fitting sightline...")
 
         sightline.fit(
@@ -171,7 +156,9 @@ def check_stop(sightlines, iteration, stop_method, freeze_after, verbose=0):
 
     # #########################
 
-    if total_bayes >= 3 or total_f >= 3:
+    num_to_stop = np.ceil(len(sightlines) / 2.0)
+
+    if total_bayes >= num_to_stop or total_f >= num_to_stop:
         print(
             str(sightlines[0].n_lines)
             + ' lines are better than '
@@ -355,7 +342,9 @@ def plot_likelihoods(sightlines, coadd, bary_coadd):
 
     # plt.suptitle("Log-Likelihoods in each sightline")
     axs[0].set_title('Geocentric Reference Frame', fontsize=14)
+    axs[0].tick_params(axis='both', labelsize=12)
     axs[1].set_title('Barycentric Reference Frame', fontsize=14)
+    axs[1].tick_params(axis='both', labelsize=12)
 
     plt.show()
 
@@ -368,8 +357,11 @@ def plot_likelihoods(sightlines, coadd, bary_coadd):
 
     axs[1].plot(sightlines[0].bary_grid, bary_coadd)
     axs[1].set_xlabel(r'Wavelength ($\AA$)', fontsize=14)
+
     axs[0].set_title('Geocentric Reference Frame', fontsize=14)
+    axs[0].tick_params(axis='both', labelsize=12)
     axs[1].set_title('Barycentric Reference Frame', fontsize=14)
+    axs[1].tick_params(axis='both', labelsize=12)
 
     plt.show()
 
@@ -465,7 +457,7 @@ sp5 = EdiblesSpectrum(file5)
 observations = [sp1, sp2, sp3, sp4, sp5]
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# TELLURIC SHIFT
+# TELLURIC WAVELENGTH CORRECTION
 
 zoom_xmin = 7661.5
 zoom_xmax = 7669
