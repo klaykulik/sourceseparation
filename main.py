@@ -114,7 +114,7 @@ def fit_models(sightlines, iteration, method='leastsq', debug=False, verbose=0):
         sightline.bary_out_interp = g(sightline.bary_grid)
 
 
-def check_stop(sightlines, iteration, stop_method, freeze_after, verbose=0):
+def check_stop(sightlines, iteration, stop_method, freezes, verbose=0):
     total_bayes = 0
     total_f = 0
 
@@ -126,9 +126,10 @@ def check_stop(sightlines, iteration, stop_method, freeze_after, verbose=0):
 
         for sightline in sightlines:
             if iteration > 0:
-                if sightline.posteriors[-1] > 0 and sightline.posteriors[-1] > 0:
-                    if sightline.posteriors[-1] / sightline.posteriors[-2] > 1:
-                        total_bayes += 1
+                if not np.isinf(sightline.posteriors[-1]):
+                    if sightline.posteriors[-1] > 0 and sightline.posteriors[-1] > 0:
+                        if sightline.posteriors[-1] / sightline.posteriors[-2] > 1:
+                            total_bayes += 1
             else:
                 total_bayes += 1
 
@@ -158,6 +159,8 @@ def check_stop(sightlines, iteration, stop_method, freeze_after, verbose=0):
 
     num_to_stop = np.ceil(len(sightlines) / 2.0)
 
+
+
     if total_bayes >= num_to_stop or total_f >= num_to_stop:
         print(
             str(sightlines[0].n_lines)
@@ -165,35 +168,103 @@ def check_stop(sightlines, iteration, stop_method, freeze_after, verbose=0):
             + str(sightlines[0].n_lines - 1)
         )
 
-        sightline.model_lag_one = sightline.complete_model
-
-        sightline.pars_lag_one = sightline.all_pars
-
-
-
-
 
     else:
         print("{} lines does not produce a better model than {} lines".format(
             sightlines[0].n_lines, sightlines[0].n_lines - 1
         ))
 
-        if freeze_after is not None:
-            print('Fitting one last time')
-            sightline.freeze(unfreeze=True)
-            sightline.fit(
-                data=sightline.interp_flux,
-                params=sightline.pars_lag_one,
-                model=sightline.model_lag_one,
-                x=sightline.grid,
-                report=True,
-                plot=True,
-                weights=1 / (np.ones_like(sightline.grid) * sightline.sigma),
-                method=method
-            )
+
+        if iteration > 0:
+            fig, axs = plt.subplots(5, 1)
+            for i in range(len(sightlines)):
+                sightline = sightlines[i]
+                axs[i].plot(list(range(2, sightline.n_lines + 1)), sightline.posteriors,
+                            marker='o', color='k')
+                axs[i].set_yscale('log')
+                axs[i].tick_params(labelbottom=False)
+
+            axs[-1].set_xlabel('Iteration number')
+            axs[-1].tick_params(labelbottom=True)
+            axs[0].set_title('Bayes Model Comparison')
+            plt.show()
+
 
         for sightline in sightlines:
-            sightline.separate(data=sightline.interp_flux, x=sightline.grid)
+            if freezes is not None:
+                print('Fitting one last time')
+                sightline.freeze(pars=sightline.old_all_pars, unfreeze=True)
+
+            try:
+                sightline.fit(
+                    data=sightline.interp_flux,
+                    old=True,
+                    x=sightline.grid,
+                    report=True,
+                    plot=True,
+                    weights=1 / (np.ones_like(sightline.grid) * sightline.sigma),
+                    method=method
+                )
+            except TypeError:
+                print()
+                print()
+                print('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
+                print(sightline.all_pars)
+                print()
+                raise
+
+        for sightline in sightlines:
+            outs = sightline.separate(data=sightline.interp_flux, x=sightline.grid, old=True)
+
+
+
+
+        fig, axs = plt.subplots(5, 3)
+
+        for i in range(len(sightlines)):
+            sightline = sightlines[i]
+
+
+            outs = sightline.separate(data=sightline.interp_flux, x=sightline.grid,
+                                      old=True, plot=False)
+            complete_out, telluric_out, nontelluric_out, cont_out = outs
+
+            axs[i, 0].plot(sightline.grid, sightline.interp_flux, color='k', label='Data')
+            axs[i, 0].plot(sightline.grid, complete_out, color='r', label='Final Model')
+            axs[i, 0].plot(sightline.grid, (sightline.interp_flux - complete_out),
+                           color='g', label='Residual')
+            axs[i, 0].set_ylabel("Flux", fontsize=14)
+            axs[i, 0].tick_params(labelbottom=False)
+
+
+            telluric_data = (sightline.interp_flux / cont_out) - nontelluric_out + 1
+            axs[i, 1].plot(sightline.grid, telluric_data, color='k', label='Telluric Data')
+            axs[i, 1].plot(sightline.grid, telluric_out, color='r', label='Telluric Model')
+            axs[i, 1].plot(sightline.grid, (telluric_data - telluric_out),
+                           color='g', label='residual')
+            axs[i, 1].tick_params(labelbottom=False)
+
+
+            nontelluric_data = (sightline.interp_flux / cont_out) - telluric_out + 1
+            axs[i, 2].plot(sightline.grid, nontelluric_data, color='k', label='Nontelluric Data')
+            axs[i, 2].plot(sightline.grid, nontelluric_out, color='r', label='Nontelluric Model')
+            axs[i, 2].plot(sightline.grid, (nontelluric_data - nontelluric_out),
+                           color='g', label='Residual')
+            axs[i, 2].tick_params(labelbottom=False)
+
+
+        axs[-1, 0].set_xlabel(r"Wavelength ($\AA$)", fontsize=14)
+        axs[-1, 1].set_xlabel(r"Wavelength ($\AA$)", fontsize=14)
+        axs[-1, 2].set_xlabel(r"Wavelength ($\AA$)", fontsize=14)
+        axs[-1, 0].legend()
+        axs[-1, 1].legend()
+        axs[-1, 2].legend()
+        axs[-1, 0].tick_params(axis='both', labelsize=12)
+        axs[-1, 1].tick_params(axis='both', labelsize=12)
+        axs[-1, 2].tick_params(axis='both', labelsize=12)
+
+        plt.show()
+
         sys.exit()
 
 
@@ -285,6 +356,27 @@ def plot_models(sightlines):
         axs[i, 0].plot(sightline.grid, sightline.out, color='r', label='Model')
         axs[i, 0].plot(sightline.grid, sightline.telluric_resid, color='g', label='Residual')
         axs[i, 0].set_ylabel('Flux', fontsize=14)
+
+
+        # for par in sightline.all_pars:
+        #     if 'lam_0' in par:
+        #         if 'Nontelluric' in par:
+        #             axs[i, 0].vlines(sightline.all_pars[par].value, ymin=0,
+        #                              ymax=np.max(sightline.interp_flux), color='b')
+
+        #         elif 'Telluric' in par:
+        #             axs[i, 0].vlines(sightline.all_pars[par].value, ymin=0,
+        #                              ymax=np.max(sightline.interp_flux), color='g')
+
+        # y_list = []
+        # x_list = []
+        # for num in range(sightline.n_anchors):
+        #     y_list.append(sightline.all_pars['y_' + str(num)].value)
+        #     x_list.append(sightline.all_pars['x_' + str(num)].value)
+
+        # axs[i, 0].scatter(x_list, y_list, marker='x', color='C1')
+
+
 
         axs[i, 1].scatter(sightline.grid, sightline.interp_bary_flux, color='k', marker='.')
         axs[i, 1].plot(sightline.bary_grid, sightline.bary_out_interp, color='r')
@@ -414,7 +506,7 @@ def add_next_line(sightlines, coadd, bary_coadd):
 
 
             if sightline.n_lines > 3:
-                tau_0 = 0.1
+                tau_0 = 0.05
             else:
                 tau_0 = 0.05
             line = {"lam_0": lam_0, "b": b, "d": K_d, "tau_0": tau_0}
@@ -431,11 +523,19 @@ def add_next_line(sightlines, coadd, bary_coadd):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # SET PARAMS
+n_anchors = 4
 method = 'leastsq'
 debug = False
 verbose = 2
 stop_method = 'bayes'
-freeze_after = None
+freezes = {
+    # 3: 'y_',
+    4: 'Telluric_line3',
+    6: 'Telluric_line5',
+    7: 'Nontelluric',
+    8: 'Telluric_line7',
+    9: 'Telluric_line8'
+}
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # IMPORT DATA
@@ -473,7 +573,7 @@ observations = telluric_shift(
 sightlines = []
 for i in range(len(observations)):
     sp = observations[i]
-    sightline = Sightline(sp, n_anchors=4)
+    sightline = Sightline(sp, n_anchors=n_anchors)
     sightlines.append(sightline)
 
 
@@ -544,27 +644,29 @@ for iteration in range(12):
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Check to stop %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     check_stop(sightlines, iteration=iteration, stop_method=stop_method,
-               freeze_after=freeze_after, verbose=1)
+               freezes=freezes, verbose=verbose)
 
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Plotting %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    plot_models(sightlines)
+    if iteration > 6:
+        plot_models(sightlines)
 
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Freeze %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    if freeze_after is not None:
+    if freezes is not None:
         for sightline in sightlines:
-            if sightline.n_lines == freeze_after:
-                print("FREEZING sightline after " + str(freeze_after) + " lines")
-                sightline.freeze()
-
+            if sightline.n_lines in freezes:
+                print("FREEZING part of sightline after " + str(sightline.n_lines) + " lines")
+                prefix = 'Telluric_line' + str(sightline.n_lines - 1)
+                sightline.freeze(prefix=freezes[sightline.n_lines])
+                sightline.freeze(prefix='y_')
 
     # %%%%%%%%%%%%%%%%%%%% Calculate and coadd likelihoods %%%%%%%%%%%%%%%%%%%%
     coadd, bary_coadd = likelihoods(sightlines)
 
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Plotting %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    plot_likelihoods(sightlines, coadd, bary_coadd)
+    # plot_likelihoods(sightlines, coadd, bary_coadd)
 
 
     # %%%%%%%%%%%%%%%%%%% Compare coaddsd and add new line %%%%%%%%%%%%%%%%%%%%
