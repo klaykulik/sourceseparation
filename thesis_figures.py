@@ -325,8 +325,8 @@ def telluric_shift_plots():
 
     xmin = 7640
     xmax = 7680
-    zoom_xmin = 7658
-    zoom_xmax = 7662
+    zoom_xmin = 7661.5
+    zoom_xmax = 7669
 
     sp1 = EdiblesSpectrum(file1)
     sp2 = EdiblesSpectrum(file2)
@@ -380,7 +380,20 @@ def telluric_shift_plots():
     plt.show()
 
 
+def data():
 
+    file1 = "/HD170740/RED_860/HD170740_w860_redl_20160613_O12.fits"
+
+    sp1 = EdiblesSpectrum(file1)
+    sp1.getSpectrum(xmin=7585, xmax=7680)
+    plt.plot(sp1.wave, sp1.flux, "k")
+
+    plt.title("HD 170740", fontsize=14)
+    plt.xlabel(r"Wavelength ($\AA$)", fontsize=14)
+    plt.ylabel("Flux", fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -397,4 +410,7 @@ if __name__ == "__main__":
     # coadding()
 
 
-    telluric_shift_plots()
+    # telluric_shift_plots()
+
+
+    data()
