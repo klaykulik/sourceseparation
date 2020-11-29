@@ -101,6 +101,13 @@ def line_examples():
     plt.ylabel("Normalized Flux", fontsize=14)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
+
+    plt.vlines(7065, 0.9, 1, color='r')
+    plt.text(7065.2, 0.995, 'He I')
+    plt.vlines(7119.5, 0.9, 1, color='r')
+    plt.text(7119.7, 0.995, 'DIB')
+
+
     plt.show()
 
 
@@ -396,21 +403,50 @@ def data():
     plt.show()
 
 
+def c60_example():
+
+    file1 = "/HD169454/RED_860/HD169454_w860_redu_20160808_O8.fits"
+    # file2 = "/HD54662/RED_860/HD54662_w860_redu_20160221_O8.fits"
+
+    xmin = 9555
+    xmax = 9600
+
+    sp1 = EdiblesSpectrum(file1)
+    sp1.getSpectrum(xmin=xmin, xmax=xmax)
+    sp1.flux = sp1.flux / np.max(sp1.flux)
+    plt.plot(sp1.wave, sp1.flux, "k")
+
+    plt.title("HD 169454", fontsize=14)
+    plt.xlabel(r"Wavelength ($\AA$)", fontsize=14)
+    plt.ylabel("Normalized Flux", fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+
+    plt.hlines(1, xmin=9574, xmax=9579, color='r')
+    plt.hlines(1, xmin=9578, xmax=9580, color='r', linestyle=':')
+
+    plt.text(9577.0, 1.01, r"C$_{60}^+$", fontsize=12)
+
+    plt.show()
+
+
+
+
+
 if __name__ == "__main__":
 
     # reference_frames()
 
-    # line_examples()
+    line_examples()
 
     # ica()
-
 
     # bayes()
 
     # coadding()
 
-
     # telluric_shift_plots()
 
+    # data()
 
-    data()
+    # c60_example()
