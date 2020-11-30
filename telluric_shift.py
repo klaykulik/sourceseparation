@@ -51,7 +51,8 @@ def telluric_shift(observations, xmin, xmax, zoom_xmin, zoom_xmax, molecule='O2'
     for pars in pars_list:
         if (xmin < pars['lam_0']) and (pars['lam_0'] < xmax):
             if pars['tau_0'] > tau_cutoff:
-                linelist.append(pars)
+                if not (7663 < pars['lam_0'] < 7668):
+                    linelist.append(pars)
     linelist.reverse()
 
 
@@ -115,15 +116,15 @@ def telluric_shift(observations, xmin, xmax, zoom_xmin, zoom_xmax, molecule='O2'
         if plot:
             plt.errorbar(reals, shift_resid, yerr=errs, fmt='o', c=cs[i],
                          label=sp.datetime.date())
-            plt.plot(reals, spl(reals), linestyle='dashed')
+            # plt.plot(reals, spl(reals), linestyle='dashed')
             plt.plot(sp.wave, spl(sp.wave), c=cs[i])
 
         shift = spl(sp.wave)
         shifts.append(shift)
 
     if plot:
-        plt.xlabel('Wavelength (Angstroms)')
-        plt.ylabel('Residual fit difference (Angstroms)')
+        plt.xlabel(r'Wavelength ($\AA$)')
+        plt.ylabel(r'Difference between fit peaks and HITRAN peaks ($\AA$)')
         plt.title("HD170740")
         plt.legend()
         plt.show()
@@ -186,15 +187,6 @@ if __name__ == '__main__':
             plt.plot(sp.grid, sp.interp_flux)
         plt.show()
 
-        length = np.min([len(sp.interp_flux) for sp in observations])
-        print(length)
-        coadd = np.ones(length)
-        for sp in observations:
-            coadd /= sp.interp_flux[0:length]
-
-        plt.plot(sp.grid[0:length], coadd)
-        plt.show()
-
     elif example == 2:
 
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -226,11 +218,3 @@ if __name__ == '__main__':
             plt.plot(sp.grid, sp.interp_flux)
         plt.show()
 
-        length = np.min([len(sp.interp_flux) for sp in observations])
-        print(length)
-        coadd = np.ones(length)
-        for sp in observations:
-            coadd /= sp.interp_flux[0:length]
-
-        plt.plot(sp.grid[0:length], coadd)
-        plt.show()
